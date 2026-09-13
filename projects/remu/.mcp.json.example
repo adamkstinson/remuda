@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "plane": {
+      "type": "http",
+      "url": "https://mcp.example.com/mcp",
+      "enabled": true,
+      "headers": {
+        "X-Plane-Key": "{{PLANE_API_KEY}}"
+      }
+    }
+  }
+}
