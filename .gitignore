@@ -4,3 +4,10 @@
 *.sqlite3
 *.sqlite3-*
 .DS_Store
+
+# Project-agent brains under projects/ — identity is tracked; secrets and runtime are not
+projects/*/.env
+projects/*/opencode.json
+projects/*/.mcp.json
+projects/*/.agentworks/state/
+projects/*/.pi/mcp.json
