@@ -1,0 +1,21 @@
+PATH
+  remote: ../..
+  specs:
+    remuda (0.1.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+
+PLATFORMS
+  aarch64-linux
+  ruby
+
+DEPENDENCIES
+  remuda!
+
+CHECKSUMS
+  remuda (0.1.0)
+
+BUNDLED WITH
+  4.0.16
