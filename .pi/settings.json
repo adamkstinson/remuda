@@ -1,0 +1,4 @@
+{
+  "skills": ["../projects/remu/.claude/skills"],
+  "enableSkillCommands": true
+}
