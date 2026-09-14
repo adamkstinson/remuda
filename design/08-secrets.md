@@ -1,115 +1,158 @@
 # 08 — Secrets & credential topology
 
-Two credential planes — **model providers** and **tools** — crossing three
-execution contexts with different trust. The design goal is unchanged from
-agent-box: *no real service credential ever inside the sandbox.*
+Two credential planes — **model providers** and **tools** — crossing two
+trust classes. The design goal is unchanged from agent-box: *no real service
+credential ever inside the sandbox.* `.env` is never mounted into the
+container (see [02-runner](./02-runner.md)). The runner may *read* it on the
+host and inject a small env tuple.
 
 ## The grid
 
-| | Workflow script (host) | Reasoning step / console (sandbox) |
+| | Workflow script / `remuda console` (host) | `Remuda.agent` / `remuda` (sandbox) |
 |---|---|---|
-| **Model provider** | n/a (scripts don't call LLMs directly — `reason` does) | Pi needs provider auth |
+| **Model provider** | n/a (scripts don't call LLMs directly — `Remuda.agent` does) | Pi needs provider auth |
 | **Tools** | direct MCP calls with operator authority | MCP via secret-free config + edge-injected auth |
 
-Three contexts, in decreasing trust:
+Two trust classes (IRB is operator Ruby, same as a workflow):
 
-1. **Workflow script** — plain Ruby on the host, fired by tick or `remuda run`.
-   Runs with the operator's authority, like any cron job. It may hold real
-   tool credentials (an MCP endpoint token in `.env`). This is accepted, not a
-   leak: the script is operator-authored code, not model output.
-2. **Reasoning step** (`Remuda.reason`) — Pi in the container. Model output
+1. **Host** — workflow scripts (`remuda run` / tick) and `remuda console`
+   (IRB). Operator authority, like any cron job or `rails console`. On a
+   laptop, `.env` may hold tokens for *self-hosted* MCP (planet-mcp, etc.).
+   Third-party SaaS tokens do not belong there — see *Client directories*
+   below.
+2. **Sandbox** — `Remuda.agent` (one-shot) and bare `remuda` (interactive Pi).
+   Same container posture; a human at the TTY does not relax it. Model output
    steers execution here, so this is the boundary that matters. No real
    service credential inside.
-3. **Console** (`remuda console`) — same container, same rules as (2). A human
-   is present but the sandbox posture doesn't relax; that's the point of
-   parity.
 
 ## Tools plane
 
-**OneCLI is the interface, for now.** Not loved, but deployed (two client
-vaults live) and its mechanism was fully designed and confirmed in agent-box:
+**The feature is an auth gateway.** The sandbox never holds a real service
+credential. It calls URLs. Something outside the box, that knows *which agent
+this is*, swaps in the real token. OAuth is a human in a dashboard. An
+unconnected tool 401s — there is no login flow inside Pi.
 
-- **Vault + forward proxy.** The sandbox routes HTTPS through the gateway
-  (`HTTPS_PROXY`), authenticating as *this agent* with a per-agent token
-  (`Proxy-Authorization`, wired in-process, never on argv). OneCLI matches the
-  destination host to a connected service and swaps a placeholder for the real
-  credential at the edge. The agent only ever "calls the URL."
-- **CA trust in the image.** OneCLI terminates TLS to inject, so the image
-  trusts the CA the agent's `.env` names. Egress-trust is an image
-  responsibility — the directory cannot edit its own sandbox.
-- **OAuth is a human's job**, once, in the vault dashboard. The agent cannot
-  self-authorize. An unconnected tool 401s and a human connects it.
-- **`mcp.json` stays secret-free** — `{name, url}` only. Provisioning a tool =
-  one line in `mcp.json` + one connection in the vault.
+OneCLI is one implementation that already did this (vault + `HTTPS_PROXY` +
+per-agent token + TLS intercept). The OSS product is not great; that is a
+reason **not** to couple Remuda to it, not a reason to put tokens back in
+`.env`. Two client vaults already live. Use it while it works; replace the
+process behind the seam without touching the gem.
 
-**Self-hosted MCP servers are the other half of the tools story**, and already
-embody the rule: planet-mcp holds the Plane keys, skydog-crm-mcp holds the CRM
-token — *secrets live with the server on the host; the caller reaches an
-endpoint.* OneCLI generalizes the same shape to third-party services we don't
-host (Gmail, QuickBooks). Both patterns are "credential at the edge"; neither
-puts a secret in the sandbox.
+**Remuda's contract — the only thing the gem may know:**
 
-**The seam, so OneCLI stays replaceable:** Remuda's contract is only the env
-tuple the sandbox receives — `HTTPS_PROXY`, `AGENT_ID`, gateway token, CA
-path — sourced from the agent's `.env`. OneCLI is one implementation of the
-thing behind that tuple. Nothing else in Remuda may learn OneCLI's name.
+The runner reads the agent's `.env` on the **host** and injects a tuple into
+the container. It does not mount the file.
+
+- proxy URL (`HTTPS_PROXY`)
+- per-agent gateway token (`Proxy-Authorization`, wired in-process, never argv)
+- CA the image trusts (path or a CA file the runner mounts)
+
+Name-only identity is impersonation: every container on the box shares the
+path to the proxy, so the token must be scoped to one agent.
+
+`mcp.json` is `{name, url}` only. Nothing in `Remuda.tool`, `Remuda.agent`, or
+the CLI talks to a vendor API. Nothing else in Remuda may learn the gateway's
+product name.
+
+**Image work (real, not a footnote):** Node `fetch` / undici does not honor
+`HTTPS_PROXY` by default. The image must wire Pi's HTTP client through the
+proxy in-process and trust the gateway CA. Egress-trust is an image
+responsibility — the directory cannot edit its own sandbox. Ship this wiring
+as if *all* sandbox HTTPS will go through the gateway, even if v0 still
+reaches the model API directly.
+
+**Self-hosted MCP** is the same shape without a proxy: planet-mcp holds the
+Plane keys, skydog-crm-mcp holds the CRM token — secrets live with the server;
+the caller reaches an endpoint. The gateway generalizes that to SaaS we don't
+host (Gmail, QuickBooks). Both are credential-at-the-edge.
+
+**What the gateway process must nail** (not Remuda — later, when we run this
+for clients):
+
+- agent identity (per-agent token)
+- host match → credential inject
+- OAuth storage + refresh
+- human connect flow
+
+OSS OneCLI's org/user sharp edges (org-split, no invite flow) are that
+process's runbook, not Remuda design.
 
 ## Model-provider plane
 
-Pi-only makes this one credential class instead of one per coding agent. Pi
-holds provider logins (Anthropic, OpenAI, …) as its own auth state on the
-host.
+Pi-only makes this one credential class instead of one per coding agent.
 
-**Proposal:** provider auth is **harness-level, not agent-level**. The runner
-injects Pi's auth into the container per invocation (mounted read-only or
-passed as env at spawn — decide with the image). Rationale: which *model* an
-agent uses is agent config; which *provider account* pays for it is an
-operator/machine concern, same as which podman binary runs the container.
+**Laptop / v0:** provider auth is **harness-level, not agent-level**. The
+runner stages the operator's Pi `auth.json` into a tmpdir and mounts it
+read-only; the entrypoint copies it onto tmpfs. Which *model* an agent uses is
+agent config; which *provider account* pays for it is an operator/machine
+concern, same as which Docker daemon runs the container. A leaked provider
+token spends money; a leaked service token reads your email — triage v0
+accordingly.
 
-The strictest future — provider keys never in the sandbox either, fronted
-through the gateway like tools ("Anthropic token to the edge," agent-box's
-open item) — stays on the roadmap, not v1. A leaked provider token spends
-money; a leaked service token reads your email. Triage accordingly.
+**Do not freeze that as the client path.** The client story is the same
+gateway: model traffic through the proxy, placeholder in the box, real key at
+the edge. Staged `auth.json` is a laptop shortcut. The image tuple and proxy
+wiring are built as if the gateway will take model egress too.
 
 ## `.env` in the agent directory
 
-Slots, not a vault:
+Slots, not a vault. The file stays on the host; the runner reads it.
 
 - gateway identity: proxy URL, per-agent token, CA path
-- endpoints + tokens for *host-side* MCP calls the workflow scripts make
-- never: third-party service credentials (those live in the vault or with the
-  MCP server that owns them)
+- endpoints + tokens for *self-hosted* MCP the workflow scripts call
+  (planet-mcp, etc.)
+- never: third-party SaaS credentials (Gmail, QuickBooks, …) — those live in
+  the gateway or with the MCP server that owns them
 
 `remuda new` writes `.env.example` documenting the slots; `.env` is gitignored
 and 0600.
 
+## Client directories (later)
+
+A client agent is a directory we can hand them. That is incompatible with
+third-party tokens in `.env`, including for host-side `Remuda.tool`.
+
+| | Laptop (us) | Client agent |
+|---|---|---|
+| **Tools (SaaS)** | gateway when present; never in the directory | gateway; tokens in `.env` are a bug |
+| **Tools (our MCP)** | `.env` may hold the per-agent MCP key | same, or also behind the gateway |
+| **Model** | staged harness `auth.json` | gateway ("token to the edge"); do not assume `auth.json` |
+
+Host `Remuda.tool` on a client directory goes to self-hosted MCP or through
+the gateway — not to a SaaS token sitting in the folder.
+
+Gateway deployment (Dark Horse instance vs per-client, rotation, `doctor`
+checks) is fleet/runbook territory. Remuda only aims the box at the tuple.
+
 ## Settled
 
-- Three-context trust grid above; the sandbox boundary is the one that matters.
-- Secret-free `mcp.json`; credential-at-the-edge for tools (OneCLI vault for
-  third-party services, self-hosted MCP servers for our own).
-- Per-agent gateway identity in the agent's `.env`; CA trust and in-process
-  proxy wiring in the image.
+- Two-class trust grid above; the sandbox boundary is the one that matters.
+  `remuda console` (IRB) is host-class; bare `remuda` (Pi) is sandbox-class.
+- `.env` and `db/` never enter the container. The runner may read `.env` on
+  the host and inject the gateway tuple.
+- The feature is credential-at-the-edge. Remuda speaks only the env tuple.
+  The gateway product (today: OneCLI) is replaceable; the gem does not name it.
+- Per-agent gateway token (name-only is impersonation). CA trust and in-process
+  proxy wiring in the image. Ship that wiring as if all sandbox HTTPS will go
+  through the gateway.
+- Secret-free `mcp.json`. Self-hosted MCP is the same shape for services we own.
+- Third-party SaaS tokens never live in the agent directory.
 - OAuth is human-performed, vault-stored, auto-refreshed. Agents cannot
   self-authorize.
-- OneCLI behind a named seam (the env tuple); replaceable without touching
-  anything else.
+- Laptop / v0 model auth: staged harness `auth.json`. Not the client path —
+  clients get model keys at the edge too.
 
-## Open
+## Open (later)
 
-- **Pi auth injection mechanics** — mount vs env; what Pi's auth state
-  actually looks like on disk and whether it can be scoped read-only per
-  invocation. (Blocks the image build.)
-- **Host-side MCP auth** — workflow scripts calling planet-mcp present whose
-  key? Per-agent API keys (current Planet practice) vs one operator key.
-  Propose: per-agent, it's what makes the audit trail readable.
-- **Does the sandbox route *all* egress through the gateway** (deny direct
-  network, allowlist via proxy) or only credentialed hosts? Ties to
-  02-runner's network-policy open item.
-- **Vault deployment story for us** (Dark Horse's own OneCLI instance vs
-  per-client only, as today). Fleet doc territory.
-- **Rotation & revocation** — per-agent gateway token rotation procedure;
-  what `remuda doctor` checks (token valid, CA current, vault reachable).
-- OneCLI's org/user sharp edges (org-split bug, no invite flow) are deployment
-  runbook material, not Remuda design — but `doctor` could assert the
-  known-good shape.
+- **Gateway as only egress** vs credentialed hosts only vs v0 direct model API
+  + staged `auth.json`. Image wiring assumes the first. Ties to [02-runner](./02-runner.md)
+  network policy.
+- **Pi `auth.json` internals** for the laptop path — on-disk shape, read-only
+  per invocation. Blocks the image build for v0, not the gateway seam.
+- **Host-side MCP auth** — per-agent API keys (current Planet practice) vs one
+  operator key. Propose: per-agent, so the audit trail is readable.
+- **Client gateway operations** — who runs it (Dark Horse vs per-client),
+  rotation/revocation, what `remuda doctor` checks (tuple valid, CA current,
+  gateway reachable). Fleet/runbook, not gem API.
+- Exact header vs proxy-URL userinfo for the per-agent token (confirm against
+  whatever process sits behind the tuple).

@@ -11,3 +11,6 @@ projects/*/opencode.json
 projects/*/.mcp.json
 projects/*/.agentworks/state/
 projects/*/.pi/mcp.json
+
+# Isolated git worktrees
+.worktrees/

@@ -14,7 +14,7 @@ different skills, tools, and plugins is a different agent — the same way a new
 Rails app directory is a different app. The directory holds everything that
 makes *this* agent this agent:
 
-- identity — `AGENTS.md` / `CLAUDE.md`
+- identity — `AGENTS.md` (always this name)
 - skills, tools / MCP config, plugins
 - *this* agent's workflows and channel bindings
 - secrets slots, memory, working files
@@ -23,8 +23,8 @@ makes *this* agent this agent:
 
 **The harness is a gem.** The machine that runs any agent — workflow engine,
 scheduler, sandbox runner, channel adapters, MCP client, the CLI itself — lives
-in `remuda` on the machine, never copied into the directory. `bin/run` and
-`bin/tick` are binstubs. Different directory ⇒ different agent. Different
+in `remuda` on the machine, never copied into the directory. `.remuda/bin/*`
+are binstubs. Different directory ⇒ different agent. Different
 lockfile ⇒ same mind on a different harness version.
 
 This is the Rails split: the framework in the gem, your app in the directory,
@@ -35,9 +35,11 @@ immediately began to drift.
 ## What it does
 
 ```bash
-remuda new ./ops              # a runnable agent directory: identity, Gemfile, binstubs
-remuda console                # from inside: an interactive Pi session, sandboxed
-remuda run ops triage         # run workflows/triage.rb once, now, recorded
+remuda new                    # scaffold this directory (skip files that exist)
+remuda new ./ops              # create child ops/ and scaffold it
+remuda                        # from inside: Pi in the sandbox
+remuda console                # Rails console: this agent's SQLite (runs, steps, schedules)
+remuda run ops triage         # run .remuda/workflows/triage.rb once, now, recorded
 remuda schedule ops operate --cron "0 7 * * *"   # cron tick, no daemon
 remuda generate skill triage  # generators write YOUR files, not framework copies
 bundle update remuda          # the harness moves; the agent's identity doesn't
@@ -57,20 +59,23 @@ ships its own curated Pi configuration as part of the harness; the agent
 directory layers its own skills, extensions, and tools on top. (Framework
 config vs app config — the Rails/Rack move.)
 
-**Interactive and unattended share one sandbox.** A workflow's reasoning step
-and `remuda console` run in the *same* container definition with the same
-mounts and the same credential hygiene — one runs Pi with a prompt and exits,
-the other attaches your terminal. Working on an agent no longer means escaping
-the sandbox its scheduled runs live in.
+**Interactive and unattended share one sandbox.** The sandbox is Pi only.
+A workflow's `Remuda.agent(...)` call and bare `remuda` (interactive) use the
+*same* container image, credential hygiene, and host config — one runs Pi with
+a prompt and exits, the other attaches your terminal. Workflow Ruby and SQLite
+stay on the host. Working on an agent no longer means escaping the sandbox its
+scheduled runs live in. `remuda console` is the other Rails door: IRB on this
+agent's database, not Pi.
 
 **Workflows are plain Ruby, not a DSL.** Agentworks began with YAML, drifted
 into a DSL, and ended up running `.rb` scripts anyway. Remuda skips to the end:
-a workflow is an ordinary Ruby script in `workflows/` that uses library
-classes — an MCP tool client for deterministic calls, `Remuda.reason(...)` for
-one sandboxed Pi invocation. No step vocabulary, no guards, no YAML. The
-*runner* records the run: `remuda run` opens the `workflow_runs` row, executes
-the script, captures output/error/duration, closes the row. The scheduler is a
-cron expression attached to a script name, nothing more.
+a workflow is an ordinary Ruby script in `.remuda/workflows/` with two library calls —
+`Remuda.tool(...)` for a deterministic MCP call, `Remuda.agent(...)` for one
+sandboxed Pi invocation. No step vocabulary, no guards, no YAML. Recording is
+ambient: those methods write `workflow_steps` themselves. The *runner* owns the
+run: `remuda run` opens the `workflow_runs` row, executes the script, captures
+output/error/duration, closes the row. The scheduler is a cron expression
+attached to a script name, nothing more.
 
 ## Boundaries
 
