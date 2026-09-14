@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+.mcp.json
+opencode.json
 *.sqlite3
 *.sqlite3-*
 .DS_Store
