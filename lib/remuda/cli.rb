@@ -26,7 +26,7 @@ module Remuda
       when "help", "--help", "-h"
         help
       when nil
-        raise ArgumentError, "bare remuda (sandboxed Pi) is not implemented yet"
+        Sandbox.attach(Directory.find(nil))
       else
         raise ArgumentError, "unknown command: #{cmd}"
       end
