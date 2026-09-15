@@ -19,6 +19,8 @@ module Remuda
         tick
       when "new"
         new_agent
+      when "console"
+        console
       when "version", "--version", "-v"
         $stdout.puts VERSION
       when "help", "--help", "-h"
@@ -47,6 +49,18 @@ module Remuda
     def new_agent
       path = @argv.shift
       Generator.new_agent(path || Dir.pwd)
+    end
+
+    def console
+      dir = Directory.find(@argv.shift)
+      Db.connect(dir)
+      Current.agent_dir = dir
+      %i[WorkflowRun WorkflowStep Schedule].each do |name|
+        Object.const_set(name, Remuda.const_get(name)) unless Object.const_defined?(name, false)
+      end
+      ARGV.clear
+      require "irb"
+      IRB.start
     end
 
     def parse_path_and_name
