@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "remuda/version"
+require_relative "remuda/image"
 require_relative "remuda/db"
 require_relative "remuda/current"
 require_relative "remuda/json_coder"
