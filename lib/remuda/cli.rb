@@ -17,6 +17,8 @@ module Remuda
         run_workflow
       when "tick"
         tick
+      when "new"
+        new_agent
       when "version", "--version", "-v"
         $stdout.puts VERSION
       when "help", "--help", "-h"
@@ -42,6 +44,11 @@ module Remuda
       Scheduler.tick(Directory.find(path))
     end
 
+    def new_agent
+      path = @argv.shift
+      Generator.new_agent(path || Dir.pwd)
+    end
+
     def parse_path_and_name
       first = @argv.shift
       second = @argv.shift
@@ -50,6 +57,7 @@ module Remuda
 
     def help
       $stdout.puts <<~HELP
+        remuda new [PATH]            scaffold an agent directory (skip existing files)
         remuda run [PATH] WORKFLOW   run a workflow through the Runner
         remuda tick [PATH]           fire due schedules through the same Runner
         remuda version
