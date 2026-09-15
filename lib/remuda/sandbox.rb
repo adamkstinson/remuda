@@ -32,7 +32,7 @@ module Remuda
           "User" => "#{Process.uid}:#{Process.gid}",
           "Env" => ["PI_OFFLINE=1", "PI_TELEMETRY=0", "AGENT_PROMPT_FILE=/run/remuda/prompt.txt"],
           "HostConfig" => {
-            "Binds" => binds(agent_dir, prompt_path),
+            "Binds" => binds(agent_dir, prompt_path: prompt_path, workflows_mode: "ro"),
             "CapDrop" => ["ALL"],
             "Tmpfs" => { "/tmp" => "rw,nosuid,size=64m" }
           }
@@ -55,8 +55,40 @@ module Remuda
       end
     end
 
-    def self.binds(agent_dir, prompt_path)
-      mounts = ["#{prompt_path}:/run/remuda/prompt.txt:ro"]
+    def self.interactive_spec(agent_dir)
+      agent_dir = File.expand_path(agent_dir)
+      {
+        "Image" => Image.tag,
+        "Entrypoint" => ["pi"],
+        "Tty" => true,
+        "OpenStdin" => true,
+        "WorkingDir" => "/agent",
+        "User" => "#{Process.uid}:#{Process.gid}",
+        "HostConfig" => {
+          "Binds" => binds(agent_dir, workflows_mode: "rw"),
+          "CapDrop" => ["ALL"]
+        }
+      }
+    end
+
+    def self.attach(agent_dir)
+      spec = interactive_spec(agent_dir)
+      args = [
+        "docker", "run", "--rm", "-it",
+        "--user", spec["User"],
+        "--workdir", "/agent",
+        "--entrypoint", "pi"
+      ]
+      Array(spec.dig("HostConfig", "Binds")).each do |bind|
+        args << "-v" << bind
+      end
+      args << spec["Image"]
+      exec(*args)
+    end
+
+    def self.binds(agent_dir, prompt_path: nil, workflows_mode: "ro")
+      mounts = []
+      mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
       %w[AGENTS.md mcp.json].each do |name|
         host = File.join(agent_dir, name)
         mounts << "#{host}:/agent/#{name}:ro" if File.file?(host)
@@ -66,7 +98,9 @@ module Remuda
         mounts << "#{host}:/agent/#{name}:rw" if File.directory?(host)
       end
       workflows = File.join(agent_dir, ".remuda", "workflows")
-      mounts << "#{workflows}:/agent/.remuda/workflows:ro" if File.directory?(workflows)
+      if File.directory?(workflows)
+        mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}"
+      end
       mounts
     end
     private_class_method :binds
