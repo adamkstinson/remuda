@@ -11,6 +11,8 @@ require_relative "remuda/mcp"
 require_relative "remuda/tool"
 require_relative "remuda/runner"
 require_relative "remuda/scheduler"
+require_relative "remuda/directory"
+require_relative "remuda/cli"
 
 module Remuda
 end
