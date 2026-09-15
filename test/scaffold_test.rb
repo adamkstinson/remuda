@@ -21,8 +21,31 @@ class ScaffoldTest < Minitest::Test
   def test_dummy_is_an_agent_directory
     assert File.directory?(DUMMY), "expected test/dummy agent fixture"
     assert File.file?(File.join(DUMMY, "AGENTS.md")), "dummy needs AGENTS.md"
+    refute File.exist?(File.join(DUMMY, "CLAUDE.md")), "dummy must not have CLAUDE.md"
     gemfile = File.read(File.join(DUMMY, "Gemfile"))
     assert_match(/\bgem\s+["']remuda["']/, gemfile)
+  end
+
+  # Break this catches: dummy root missing the files Pi and the operator look at.
+  def test_dummy_root_has_agent_facing_files
+    assert File.file?(File.join(DUMMY, "mcp.json")), "dummy needs mcp.json"
+    assert File.file?(File.join(DUMMY, "Gemfile")), "dummy needs Gemfile"
+    gemfile = File.read(File.join(DUMMY, "Gemfile"))
+    assert_match(/\bgem\s+["']remuda["']/, gemfile)
+    assert File.directory?(File.join(DUMMY, "files")), "dummy needs files/"
+    assert File.directory?(File.join(DUMMY, ".pi")), "dummy needs .pi/"
+    assert File.file?(File.join(DUMMY, ".env.example")), "dummy needs .env.example"
+  end
+
+  # Break this catches: harness instance at dummy root, or missing .remuda/.
+  def test_dummy_harness_instance_lives_under_dot_remuda
+    remuda = File.join(DUMMY, ".remuda")
+    assert File.directory?(File.join(remuda, "workflows")), "dummy needs .remuda/workflows/"
+    assert File.file?(File.join(remuda, "channels.yml")), "dummy needs .remuda/channels.yml"
+    assert File.directory?(File.join(remuda, "db")), "dummy needs .remuda/db/"
+    assert File.directory?(File.join(remuda, "bin")), "dummy needs .remuda/bin/"
+    refute File.exist?(File.join(DUMMY, "workflows")),
+           "workflows/ belongs under .remuda/, not dummy root"
   end
 
   # Break this catches: engine code copied into the agent directory.
