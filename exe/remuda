@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "remuda"
+
+begin
+  Remuda::CLI.start(ARGV)
+rescue ArgumentError => e
+  warn e.message
+  exit 1
+end
