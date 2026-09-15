@@ -1,0 +1,2 @@
+# Channel bindings for this agent. Adapters live in the gem; tokens in .env.
+# transports: {}
