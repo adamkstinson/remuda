@@ -1,6 +1,6 @@
 # 07 — CLI
 
-One user-facing tool. It generates, runs, schedules, inspects, and updates.
+One user-facing tool. It scaffolds, runs, schedules, inspects, and updates.
 It is a thin shell over the gem's library surface — never a second
 implementation.
 
@@ -32,7 +32,6 @@ implementation.
   remuda runs [PATH] [WORKFLOW]     recent runs; `remuda run show ID` detail
   remuda db:migrate [PATH]          escape hatch; migrate-on-boot is the path (05)
   remuda channels start|stop [PATH] channel supervisor (06)
-  remuda generate GENERATOR NAME    write YOUR files (workflow, skill, …)
   remuda version
   remuda help
   ```
@@ -45,22 +44,21 @@ implementation.
   ops` creates child `ops/` (if needed) and scaffolds that. Existing files
   are left alone — no overwrite, no duplicate. Collision with bare `remuda`
   does not arise: `new` is a subcommand.
-- **Generators write agent files, never framework code.** `generate workflow
-  digest` writes `.remuda/workflows/digest.rb` from a template; `generate
-  skill x` writes a skill skeleton under `.pi/`. No engine code is ever
-  written into a directory.
+- **No `remuda generate`.** Workflows and skills are ordinary files the
+  operator writes (`touch .remuda/workflows/foo.rb`, a skill under `.pi/`).
+  A generator whose only job is an empty stub is not a command anyone would
+  run (Adam, 2026-09-16). `remuda new` still scaffolds the directory; it does
+  not stamp named building blocks. No engine code is ever written into a
+  directory.
 
 No-args default task = sandbox Pi; every named subcommand stays a subcommand.
 
 ## Open
 
-- Option parsing / generator library: hand-rolled optparse (Agentworks style)
-  vs thor — thor buys generator conventions (`create_file`, diffs on
-  conflict) at the cost of a dependency. Lean thor.
-- `remuda update`: what does upgrading an agent mean beyond `bundle update`
-  — re-run generators with diff/skip like `rails app:update`?
+- Option parsing: hand-rolled optparse (Agentworks style) vs thor. Lean
+  whatever the remaining commands need; do not take thor for generators.
+- `remuda update`: what does upgrading an agent mean beyond `bundle update`?
 - `remuda doctor`: environment checks (Docker daemon, image present, cron
   installed, Pi login state) — v1 or later?
-- Generator inventory for v1: `workflow`, `skill`, what else?
 - Exit codes / JSON output mode for scripting against the CLI.
 - `remuda console` backend: irb vs pry; `remuda c` alias like Rails?

@@ -45,7 +45,7 @@ remuda/
 │       ├── mcp.rb             # host MCP client
 │       ├── sandbox.rb         # Docker Engine API, mounts, wait
 │       ├── scheduler.rb       # fugit, due schedules, skip overlap
-│       ├── generator.rb       # new / generate
+│       ├── generator.rb       # remuda new only
 │       │
 │       ├── models/
 │       │   ├── workflow_run.rb
