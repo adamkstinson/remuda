@@ -225,7 +225,7 @@ a login inside `remuda` is lost when you quit.
 | `remuda version` | Gem version |
 | `remuda help` | Subcommands (`console` and bare `remuda` are omitted from help) |
 
-Not shipped: `remuda schedule`, `remuda generate`, channels.
+Not shipped: `remuda schedule`, channels. There is no `remuda generate` — add workflow scripts and skills as ordinary files.
 
 ## Boundaries
 
