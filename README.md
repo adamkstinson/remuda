@@ -1,101 +1,243 @@
 # Remuda
 
-**Rails for agent harnesses.** One Ruby gem that builds, runs, maintains, and
-optimizes agent directories — the way Rails does for apps.
+**Rails for agent harnesses.** One Ruby gem that builds, runs, and maintains
+agent directories — the way Rails does for apps.
+
+An **agent is a directory**. The harness lives in the gem, never copied into
+that directory. **Pi** is the only coding-agent runtime. Workflows are plain
+Ruby.
 
 *A remuda is the working string of saddle horses on a ranch: the pool you rope
 today's mount from, ride, and turn back. Many horses, one outfit. Many agents,
 one harness.*
 
-## The thesis
+v1 is the CLI and workflow runner below. Internals live in [`design/`](design/).
 
-**An agent is a directory.** A new directory with a different `AGENTS.md`,
-different skills, tools, and plugins is a different agent — the same way a new
-Rails app directory is a different app. The directory holds everything that
-makes *this* agent this agent:
+## Requirements
 
-- identity — `AGENTS.md` (always this name)
-- skills, tools / MCP config, plugins
-- *this* agent's workflows and channel bindings
-- secrets slots, memory, working files
-- run history and state, in a local SQLite file
-- a `Gemfile.lock` naming the harness version it expects
+- Ruby 3.2 or later (4.x is fine)
+- Bundler
+- Docker, only if you use sandboxed Pi (`remuda` with no subcommand, or `Remuda.agent`)
 
-**The harness is a gem.** The machine that runs any agent — workflow engine,
-scheduler, sandbox runner, channel adapters, MCP client, the CLI itself — lives
-in `remuda` on the machine, never copied into the directory. `.remuda/bin/*`
-are binstubs. Different directory ⇒ different agent. Different
-lockfile ⇒ same mind on a different harness version.
+This repo is private: [adamkstinson/remuda](https://github.com/adamkstinson/remuda).
 
-This is the Rails split: the framework in the gem, your app in the directory,
-the lockfile binding them. It was decided deliberately (Agentworks ADR-005)
-over the scaffolder model, where the engine was stenciled into every agent and
-immediately began to drift.
+## Install
 
-## What it does
+From a clone of this repo:
 
 ```bash
-remuda new                    # scaffold this directory (skip files that exist)
-remuda new ./ops              # create child ops/ and scaffold it
-remuda                        # from inside: Pi in the sandbox
-remuda console                # Rails console: this agent's SQLite (runs, steps, schedules)
-remuda run ops triage         # run .remuda/workflows/triage.rb once, now, recorded
-remuda schedule ops operate --cron "0 7 * * *"   # cron tick, no daemon
-remuda generate skill triage  # generators write YOUR files, not framework copies
-bundle update remuda          # the harness moves; the agent's identity doesn't
+git clone https://github.com/adamkstinson/remuda.git
+cd remuda
+bundle install
+bundle exec remuda version    # 0.1.0
 ```
 
-Runs, steps, schedules, and channel state are rows in the agent's own SQLite
-database (ActiveRecord in the gem), not loose JSON files. Channels (Telegram,
-Planet, Slack…) are adapters in the gem, bound per-agent by config.
+In an agent's `Gemfile` (after `remuda new`, point at the git source or a
+path):
 
-## Design choices
+```ruby
+source "https://rubygems.org"
 
-**Pi is the runtime.** Remuda runs exactly one coding agent: Pi. Pi accepts
-the other model providers' logins, so *model* stays a per-agent config value
-while *harness* stops being a dimension — one entrypoint, one wire format, one
-container image, instead of a matrix of claude/opencode/codex adapters. Remuda
-ships its own curated Pi configuration as part of the harness; the agent
-directory layers its own skills, extensions, and tools on top. (Framework
-config vs app config — the Rails/Rack move.)
+gem "remuda", git: "https://github.com/adamkstinson/remuda.git"
+# gem "remuda", path: "../remuda"   # local checkout
+```
 
-**Interactive and unattended share one sandbox.** The sandbox is Pi only.
-A workflow's `Remuda.agent(...)` call and bare `remuda` (interactive) use the
-*same* container image, credential hygiene, and host config — one runs Pi with
-a prompt and exits, the other attaches your terminal. Workflow Ruby and SQLite
-stay on the host. Working on an agent no longer means escaping the sandbox its
-scheduled runs live in. `remuda console` is the other Rails door: IRB on this
-agent's database, not Pi.
+```bash
+bundle install
+bundle exec remuda help
+```
 
-**Workflows are plain Ruby, not a DSL.** Agentworks began with YAML, drifted
-into a DSL, and ended up running `.rb` scripts anyway. Remuda skips to the end:
-a workflow is an ordinary Ruby script in `.remuda/workflows/` with two library calls —
-`Remuda.tool(...)` for a deterministic MCP call, `Remuda.agent(...)` for one
-sandboxed Pi invocation. No step vocabulary, no guards, no YAML. Recording is
-ambient: those methods write `workflow_steps` themselves. The *runner* owns the
-run: `remuda run` opens the `workflow_runs` row, executes the script, captures
-output/error/duration, closes the row. The scheduler is a cron expression
-attached to a script name, nothing more.
+`PATH` on commands is an agent directory. Omit it when the current directory
+already is one (`AGENTS.md` plus a `Gemfile` that names `remuda`).
+
+## Scaffold an agent
+
+```bash
+bundle exec remuda new ./ops
+cd ops
+```
+
+Or scaffold the current directory: `remuda new`. Existing files are left alone.
+
+That writes identity and slots, not engine code:
+
+```
+ops/
+├── AGENTS.md              identity
+├── Gemfile
+├── mcp.json               MCP server URLs only (no secrets)
+├── .env.example           copy to .env (gitignored); host-only
+├── .pi/                   this agent's Pi config / skills
+├── files/                 working files (agent memory)
+└── .remuda/
+    ├── workflows/         plain Ruby scripts
+    └── db/                remuda.sqlite3 created on first run/tick/console
+```
+
+There is no `lib/` harness copy in the agent. Edit `Gemfile` so `remuda`
+resolves (git or path), then `bundle install`.
+
+## Run a workflow
+
+A workflow is `.remuda/workflows/<name>.rb` — ordinary Ruby, no DSL.
+
+```ruby
+# .remuda/workflows/hello.rb
+puts "hello"
+```
+
+```bash
+bundle exec remuda run hello           # inside the agent
+bundle exec remuda run ./ops hello     # from elsewhere
+```
+
+That opens a `workflow_runs` row (`trigger: "manual"`), `load`s the script,
+then closes the row (`ok` or `error`). Inspect it in console (below).
+
+## Workflow APIs
+
+Two library calls. They run on the **host** (your credentials). Recording is
+ambient when the Runner is in play.
+
+### `Remuda.tool("server.method", **args)`
+
+Host-side MCP call. Split on the first dot: server `plane`, tool
+`list_work_items`. URL comes from `mcp.json`; token from the agent's `.env`
+(`PLANE_MCP_TOKEN` or `MCP_TOKEN`). Raises on error.
+
+```json
+{
+  "mcpServers": {
+    "plane": { "url": "https://work.darkhorse.so/mcp" }
+  }
+}
+```
+
+```ruby
+# .remuda/workflows/triage.rb
+items = Remuda.tool("plane.list_work_items", project_id: "…", state_group: "backlog")
+items.each { |item| warn item.inspect }
+```
+
+### `Remuda.agent(prompt)`
+
+One-shot **sandboxed** Pi in the `remuda-pi` image (same image as bare
+`remuda`). Result has `output`, `ok`, `exit_code`, and related fields.
+
+```ruby
+# .remuda/workflows/ping.rb
+result = Remuda.agent("Reply with the single word pong.")
+puts result.output
+```
+
+v1 batch runs Pi with `--offline` and does not yet stage host `auth.json` into
+the box, so this does not call a model provider until that wiring exists.
+Steps still record.
+
+Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens (e.g.
+planet-mcp) may live there; the file is never mounted into the sandbox.
+
+## Console
+
+IRB on this agent's SQLite — not Pi.
+
+```bash
+bundle exec remuda console
+bundle exec remuda console ./ops
+```
+
+Top-level constants: `WorkflowRun`, `WorkflowStep`, `Schedule`.
+
+```ruby
+WorkflowRun.last
+WorkflowRun.where(status: "error").order(id: :desc).limit(5)
+WorkflowStep.where(workflow_run_id: 1).order(:position)
+```
+
+`Remuda.tool` / `Remuda.agent` work here too. They do not write steps unless a
+run is in progress (`Current.run`).
+
+## Schedule a workflow
+
+There is no `remuda schedule` command in v1. Insert a row, then tick.
+
+```bash
+bundle exec remuda console
+```
+
+```ruby
+Schedule.create!(
+  workflow: "hello",
+  cron: "0 7 * * *",
+  timezone: "UTC",
+  next_occurrence: Time.now.utc,
+  paused: false
+)
+```
+
+```bash
+bundle exec remuda tick           # inside the agent
+bundle exec remuda tick ./ops
+```
+
+Tick fires unpaused rows with `next_occurrence <= now` through the same Runner
+(`trigger: "schedule"`), then advances `last_occurrence` / `next_occurrence`.
+If that workflow still has a `running` row, the new run is `skipped`.
+
+No daemon. Cron the tick yourself, e.g. every minute:
+
+```cron
+* * * * * cd /path/to/ops && bundle exec remuda tick
+```
+
+## Interactive Pi (sandboxed)
+
+From **inside** an agent directory, no subcommand:
+
+```bash
+bundle exec remuda
+```
+
+That is `docker run --rm -it` of `remuda-pi:<gem-version>`. Same sandbox
+`Remuda.agent` uses. Workflow Ruby and SQLite stay on the host.
+
+| Survives on the host | Dies when the container exits |
+|---|---|
+| `AGENTS.md`, `mcp.json` | `/tmp` (tmpfs): Pi home, auth, default sessions |
+| `.pi/`, `files/` | the container rootfs (`--rm`) |
+| `.remuda/workflows/` (writable in this interactive door) | |
+
+`.env` and `.remuda/db/` are **not** mounted.
+
+Provider login does **not** belong in this box. Log in with **host** `pi`
+(`~/.pi/auth.json`). Remuda does not yet copy that file into the sandbox, so
+a login inside `remuda` is lost when you quit.
+
+## CLI (v1)
+
+| Command | What |
+|---|---|
+| `remuda new [PATH]` | Scaffold an agent directory |
+| `remuda run [PATH] WORKFLOW` | Run `.remuda/workflows/WORKFLOW.rb` once, recorded |
+| `remuda tick [PATH]` | Fire due schedules through the same Runner |
+| `remuda console [PATH]` | IRB on this agent's SQLite |
+| `remuda` | Sandboxed Pi (must already be in an agent directory) |
+| `remuda version` | Gem version |
+| `remuda help` | Subcommands (`console` and bare `remuda` are omitted from help) |
+
+Not shipped: `remuda schedule`, `remuda generate`, channels.
 
 ## Boundaries
 
-- **Not a SaaS.** No cloud, no control plane. Your machine, your directories.
-- **Not an agent framework.** Remuda doesn't decide how agents reason. Behavior
-  is the directory's files — customer-owned.
-- **Not multi-tenant.** Fleet is many directories and one gem, not a server.
+- **Not a SaaS.** Your machine, your directories.
+- **Not an agent framework.** Behavior is the directory's files.
+- **Not multi-tenant.** Many directories, one gem.
 
 ## Lineage
 
-Remuda is the successor to **Agentworks** (`~/Projects/agentworks` — agent-box,
-agent-workflows, agent-channels). That project proved the engine, the YAML/Ruby
-workflow format, the box seam, and the channel protocol, but stenciled its
-runtime into each agent (`.agentworks/lib/**`). Remuda takes the code and
-leaves the architecture: one repo, one gem, no stencil, no backwards
-compatibility. The live Agentworks agents (Ops, Assistant) keep running their
-frozen copies until they are migrated onto the gem.
+Successor to Agentworks. That project proved the engine and then stenciled it
+into every agent. Remuda keeps the ideas, not the stencil, and is not
+backwards compatible. Live Ops/Assistant agents stay on Agentworks until
+migrated.
 
-## Status
-
-Named and shaped; not yet built. First milestone: one test agent whose
-directory contains no engine code, that runs a scheduled workflow through the
-gem and writes a `workflow_runs` row to its own SQLite file.
+Design notes (not required to use v1): [`design/`](design/).
