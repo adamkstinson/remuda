@@ -30,11 +30,11 @@ module Remuda
           ],
           "WorkingDir" => "/agent",
           "User" => "#{Process.uid}:#{Process.gid}",
-          "Env" => ["PI_OFFLINE=1", "PI_TELEMETRY=0", "AGENT_PROMPT_FILE=/run/remuda/prompt.txt"],
+          "Env" => sandbox_env("AGENT_PROMPT_FILE=/run/remuda/prompt.txt", offline: true),
           "HostConfig" => {
             "Binds" => binds(agent_dir, prompt_path: prompt_path, workflows_mode: "ro"),
             "CapDrop" => ["ALL"],
-            "Tmpfs" => { "/tmp" => "rw,nosuid,size=64m" }
+            "Tmpfs" => tmpfs
           }
         )
 
@@ -64,9 +64,11 @@ module Remuda
         "OpenStdin" => true,
         "WorkingDir" => "/agent",
         "User" => "#{Process.uid}:#{Process.gid}",
+        "Env" => sandbox_env,
         "HostConfig" => {
           "Binds" => binds(agent_dir, workflows_mode: "rw"),
-          "CapDrop" => ["ALL"]
+          "CapDrop" => ["ALL"],
+          "Tmpfs" => tmpfs
         }
       }
     end
@@ -77,14 +79,40 @@ module Remuda
         "docker", "run", "--rm", "-it",
         "--user", spec["User"],
         "--workdir", "/agent",
-        "--entrypoint", "pi"
+        "--entrypoint", "pi",
+        "--tmpfs", "/tmp:#{tmpfs_flags}"
       ]
+      Array(spec["Env"]).each do |env|
+        args << "-e" << env
+      end
       Array(spec.dig("HostConfig", "Binds")).each do |bind|
         args << "-v" << bind
       end
       args << spec["Image"]
       exec(*args)
     end
+
+    def self.sandbox_env(*extra, offline: false)
+      env = [
+        "HOME=/tmp/home",
+        "PI_CODING_AGENT_DIR=/tmp/pi",
+        "PI_TELEMETRY=0",
+        *extra
+      ]
+      env.unshift("PI_OFFLINE=1") if offline
+      env
+    end
+    private_class_method :sandbox_env
+
+    def self.tmpfs
+      { "/tmp" => tmpfs_flags }
+    end
+    private_class_method :tmpfs
+
+    def self.tmpfs_flags
+      "rw,nosuid,size=64m,uid=#{Process.uid},gid=#{Process.gid}"
+    end
+    private_class_method :tmpfs_flags
 
     def self.binds(agent_dir, prompt_path: nil, workflows_mode: "ro")
       mounts = []
