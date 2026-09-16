@@ -22,6 +22,17 @@ class InteractiveTest < Minitest::Test
     refute binds.any? { |b| b.include?("/lib/remuda") }, "workflow Ruby stays on the host gem"
   end
 
+  def test_interactive_gives_pi_a_writable_home
+    spec = Remuda::Sandbox.interactive_spec(DUMMY)
+    env = Array(spec["Env"])
+    home = env.find { |e| e.start_with?("HOME=") }
+    refute_nil home, "HOME must be set so Pi does not mkdir /.pi"
+    refute_equal "HOME=/", home
+    assert env.any? { |e| e.start_with?("PI_CODING_AGENT_DIR=") }
+    tmpfs = spec.dig("HostConfig", "Tmpfs") || {}
+    assert tmpfs.key?("/tmp"), "expected tmpfs on /tmp for HOME/PI_CODING_AGENT_DIR"
+  end
+
   def test_cli_bare_invokes_sandbox_attach
     source = File.read(File.join(ROOT, "lib/remuda/cli.rb"))
     assert_match(/Sandbox\.attach/, source)
