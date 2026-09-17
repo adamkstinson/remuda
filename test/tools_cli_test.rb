@@ -37,12 +37,12 @@ class ToolsCliTest < Minitest::Test
     end
   end
 
-  # Break this catches: remuda tools is not a CLI command that lists MCP tools.
+  # Break this catches: remuda tools list dumps descriptions instead of names only.
   def test_remuda_tools_lists_qualified_tool_names
     status, output = invoke("tools", DUMMY)
     assert_equal 0, status, output
     assert_includes output, "stub.echo"
-    assert_includes output, "Echo arguments"
+    refute_includes output, "Echo arguments"
   end
 
   # Break this catches: remuda tools TOOL_NAME does not print that tool's input schema.
