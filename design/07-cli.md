@@ -26,6 +26,7 @@ implementation.
   remuda new [PATH] [--scaffold NAME]  scaffold cwd, or child PATH (01)
   remuda console                    IRB against this agent's DB (05)
   remuda run [PATH] WORKFLOW [--input k=v]   Runner#run + record (03)
+  remuda tools [PATH] [NAME]    MCP tools/list from mcp.json; NAME shows schema
   remuda schedule [PATH] WORKFLOW --cron EXPR (04)
   remuda unschedule [PATH] WORKFLOW
   remuda schedules [PATH]           list schedules + next occurrences
