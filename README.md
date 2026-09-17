@@ -123,8 +123,8 @@ items.each { |item| warn item.inspect }
 See the catalog while writing a workflow:
 
 ```bash
-bundle exec remuda tools                      # server.method + description
-bundle exec remuda tools list_work_items      # schema for one tool
+bundle exec remuda tools                      # server.method names
+bundle exec remuda tools list_work_items      # description + schema
 bundle exec remuda tools ./ops plane.list_work_items
 ```
 
@@ -229,7 +229,7 @@ a login inside `remuda` is lost when you quit.
 | `remuda new [PATH]` | Scaffold an agent directory |
 | `remuda run [PATH] WORKFLOW` | Run `.remuda/workflows/WORKFLOW.rb` once, recorded |
 | `remuda tick [PATH]` | Fire due schedules through the same Runner |
-| `remuda tools [PATH] [NAME]` | List MCP tools from `mcp.json`, or print one schema |
+| `remuda tools [PATH] [NAME]` | List MCP tool names from `mcp.json`, or print one tool |
 | `remuda console [PATH]` | IRB on this agent's SQLite |
 | `remuda` | Sandboxed Pi (must already be in an agent directory) |
 | `remuda version` | Gem version |

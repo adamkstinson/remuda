@@ -80,8 +80,10 @@ module Remuda
 
       catalog.each do |tool|
         $stdout.puts "#{tool[:server]}.#{tool[:name]}"
-        $stdout.puts "  #{tool[:description]}" if tool[:description] && !tool[:description].empty?
-        next unless name && tool[:input_schema]
+        next unless name
+
+        $stdout.puts tool[:description] if tool[:description] && !tool[:description].empty?
+        next unless tool[:input_schema]
 
         $stdout.puts
         $stdout.puts JSON.pretty_generate(tool[:input_schema])
@@ -109,7 +111,7 @@ module Remuda
         remuda new [PATH]            scaffold an agent directory (skip existing files)
         remuda run [PATH] WORKFLOW   run a workflow through the Runner
         remuda tick [PATH]           fire due schedules through the same Runner
-        remuda tools [PATH] [NAME]   list MCP tools, or show one schema
+        remuda tools [PATH] [NAME]   list MCP tool names, or show one tool
         remuda version
         remuda help
       HELP
