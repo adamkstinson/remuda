@@ -1,6 +1,0 @@
-# The workspace root is not a git repo; this file exists so that if anyone ever
-# inits one here, the live credentials never land in it.
-.env
-opencode.json
-.mcp.json
-.agentworks/state/
