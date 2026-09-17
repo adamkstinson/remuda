@@ -115,8 +115,8 @@ end
 
 ## Open
 
-- How tool schemas surface for arguments/errors (MCP `tools/list` vs fail
-  at call time).
+- How tool schemas surface for arguments/errors: `remuda tools` lists via MCP
+  `tools/list`; `Remuda.tool` still fails at call time.
 - Exact `Remuda.agent` result class fields beyond `output` / `session_id` /
   `usage` / `ok`.
 - Per-run wall clock besides the sandbox `/wait`.
