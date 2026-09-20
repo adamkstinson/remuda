@@ -15,6 +15,7 @@ an open item get recorded as ADRs in `../adr/` when we start cutting code.
 | [07-cli.md](./07-cli.md) | CLI — bare `remuda` is Pi; `console` is IRB |
 | [08-secrets.md](./08-secrets.md) | Secrets — gateway seam, two planes, client vs laptop |
 | [09-gem.md](./09-gem.md) | The gem — tree, models-in-gem, build order |
+| [fleet-inventory.md](./fleet-inventory.md) | Live Agentworks ticks on box (input to fleet & migration) |
 
 Identified but not yet drafted: observability & the optimize loop, fleet &
-migration, distribution & versioning (gem ↔ image ↔ Pi pinning).
+migration (`10-fleet-migration.md`), distribution & versioning (gem ↔ image ↔ Pi pinning).
