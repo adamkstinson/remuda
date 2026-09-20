@@ -16,6 +16,7 @@ an open item get recorded as ADRs in `../adr/` when we start cutting code.
 | [08-secrets.md](./08-secrets.md) | Secrets — gateway seam, two planes, client vs laptop |
 | [09-gem.md](./09-gem.md) | The gem — tree, models-in-gem, build order |
 | [fleet-inventory.md](./fleet-inventory.md) | Live Agentworks ticks on box (input to fleet & migration) |
+| [10-fleet-migration.md](./10-fleet-migration.md) | Fleet cutover order, gem gaps, leftover ticks |
 
-Identified but not yet drafted: observability & the optimize loop, fleet &
-migration (`10-fleet-migration.md`), distribution & versioning (gem ↔ image ↔ Pi pinning).
+Identified but not yet drafted: observability & the optimize loop,
+distribution & versioning (gem ↔ image ↔ Pi pinning).
