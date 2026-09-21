@@ -10,47 +10,40 @@ class SandboxAuthTest < Minitest::Test
   DUMMY = File.join(ROOT, "test/dummy")
 
   def test_batch_spec_does_not_start_pi_offline
-    spec = spec_with_staged_auth
+    spec = dummy_batch_spec
     refute_includes spec["Cmd"], "--offline"
     env = Array(spec["Env"])
     refute env.any? { |e| e.start_with?("PI_OFFLINE=") }, env.inspect
   end
 
-  def test_batch_spec_stages_host_auth_and_does_not_mount_agent_env
-    fake_auth = nil
-    spec = nil
-    Dir.mktmpdir("remuda-auth") do |dir|
-      fake_auth = File.join(dir, "auth.json")
-      File.write(fake_auth, '{"test":true}')
-      File.chmod(0o600, fake_auth)
-      auth_dir = File.join(dir, "pi-agent")
-      FileUtils.mkdir_p(auth_dir)
-      FileUtils.cp(fake_auth, File.join(auth_dir, "auth.json"))
-
-      prompt = File.join(dir, "prompt.txt")
-      File.write(prompt, "hi")
-      spec = Remuda::Sandbox.batch_spec(DUMMY, prompt_path: prompt, auth_dir: auth_dir)
-    end
+  def test_pi_user_dir_is_agent_pi_agent_not_tmp_or_host_login
+    spec = dummy_batch_spec
+    env = Array(spec["Env"])
+    assert_includes env, "PI_CODING_AGENT_DIR=/agent/.pi/agent"
+    refute env.any? { |e| e.include?("/tmp/pi") }, env.inspect
 
     binds = spec.dig("HostConfig", "Binds") || []
-    assert binds.any? { |b| b.include?("/tmp/pi") }, binds.inspect
+    assert binds.any? { |b| b.include?("#{DUMMY}/.pi:") && b.include?("/agent/.pi") }, binds.inspect
+    refute binds.any? { |b| b.include?("/tmp/pi") }, binds.inspect
     refute binds.any? { |b| b.include?(File.join(DUMMY, ".env")) }, binds.inspect
-    refute binds.any? { |b| b.split(":", 2).first.end_with?("/.env") }, binds.inspect
     host_agent = File.expand_path("~/.pi/agent")
     refute binds.any? { |b| b.start_with?("#{host_agent}:") }, binds.inspect
   end
 
+  def test_interactive_spec_uses_same_pi_user_dir
+    spec = Remuda::Sandbox.interactive_spec(DUMMY)
+    env = Array(spec["Env"])
+    assert_includes env, "PI_CODING_AGENT_DIR=/agent/.pi/agent"
+    refute env.any? { |e| e.include?("/tmp/pi") }, env.inspect
+  end
 
   private
 
-  def spec_with_staged_auth
-    Dir.mktmpdir("remuda-auth") do |dir|
+  def dummy_batch_spec
+    Dir.mktmpdir("remuda-prompt") do |dir|
       prompt = File.join(dir, "prompt.txt")
       File.write(prompt, "hi")
-      auth_dir = File.join(dir, "pi-agent")
-      FileUtils.mkdir_p(auth_dir)
-      File.write(File.join(auth_dir, "auth.json"), "{}")
-      return Remuda::Sandbox.batch_spec(DUMMY, prompt_path: prompt, auth_dir: auth_dir)
+      return Remuda::Sandbox.batch_spec(DUMMY, prompt_path: prompt)
     end
   end
 end

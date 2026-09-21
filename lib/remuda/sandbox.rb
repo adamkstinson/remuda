@@ -16,10 +16,10 @@ module Remuda
         prompt_path = File.join(tmpdir, "prompt.txt")
         File.write(prompt_path, prompt.to_s)
         File.chmod(0o644, prompt_path)
-        auth_dir = PiAuth.stage(tmpdir, agent_dir)
+        ensure_pi_agent_dir(agent_dir)
 
         container = Docker::Container.create(
-          batch_spec(agent_dir, prompt_path: prompt_path, auth_dir: auth_dir)
+          batch_spec(agent_dir, prompt_path: prompt_path)
         )
 
         container.start
@@ -39,7 +39,7 @@ module Remuda
       end
     end
 
-    def self.batch_spec(agent_dir, prompt_path:, auth_dir: nil)
+    def self.batch_spec(agent_dir, prompt_path:)
       agent_dir = File.expand_path(agent_dir)
       cmd = [
         "--mode", "json",
@@ -63,7 +63,6 @@ module Remuda
           "Binds" => binds(
             agent_dir,
             prompt_path: prompt_path,
-            auth_dir: auth_dir,
             workflows_mode: "ro"
           ),
           "CapDrop" => ["ALL"],
@@ -72,7 +71,7 @@ module Remuda
       }
     end
 
-    def self.interactive_spec(agent_dir, auth_dir: nil)
+    def self.interactive_spec(agent_dir)
       agent_dir = File.expand_path(agent_dir)
       {
         "Image" => Image.tag,
@@ -83,7 +82,7 @@ module Remuda
         "User" => "#{Process.uid}:#{Process.gid}",
         "Env" => sandbox_env,
         "HostConfig" => {
-          "Binds" => binds(agent_dir, auth_dir: auth_dir, workflows_mode: "rw"),
+          "Binds" => binds(agent_dir, workflows_mode: "rw"),
           "CapDrop" => ["ALL"],
           "Tmpfs" => tmpfs
         }
@@ -92,10 +91,8 @@ module Remuda
 
     def self.attach(agent_dir)
       agent_dir = File.expand_path(agent_dir)
-      tmpdir = Dir.mktmpdir("remuda-pi-auth")
-      File.chmod(0o700, tmpdir)
-      auth_dir = PiAuth.stage(tmpdir, agent_dir)
-      spec = interactive_spec(agent_dir, auth_dir: auth_dir)
+      ensure_pi_agent_dir(agent_dir)
+      spec = interactive_spec(agent_dir)
       args = [
         "docker", "run", "--rm", "-it",
         "--user", spec["User"],
@@ -116,7 +113,7 @@ module Remuda
     def self.sandbox_env(*extra)
       [
         "HOME=/tmp/home",
-        "PI_CODING_AGENT_DIR=/tmp/pi",
+        "PI_CODING_AGENT_DIR=/agent/.pi/agent",
         "PI_TELEMETRY=0",
         *extra
       ]
@@ -133,10 +130,16 @@ module Remuda
     end
     private_class_method :tmpfs_flags
 
-    def self.binds(agent_dir, prompt_path: nil, auth_dir: nil, workflows_mode: "ro")
+    def self.ensure_pi_agent_dir(agent_dir)
+      dir = File.join(File.expand_path(agent_dir), ".pi", "agent")
+      FileUtils.mkdir_p(dir)
+      dir
+    end
+    private_class_method :ensure_pi_agent_dir
+
+    def self.binds(agent_dir, prompt_path: nil, workflows_mode: "ro")
       mounts = []
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
-      mounts << "#{auth_dir}:/tmp/pi:rw" if auth_dir && File.directory?(auth_dir)
       %w[AGENTS.md mcp.json].each do |name|
         host = File.join(agent_dir, name)
         mounts << "#{host}:/agent/#{name}:ro" if File.file?(host)
