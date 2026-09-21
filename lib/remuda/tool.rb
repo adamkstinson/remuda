@@ -70,7 +70,7 @@ module Remuda
     headers = spec["headers"]
     return {} unless headers.is_a?(Hash)
 
-    vars = env_vars(agent_dir)
+    vars = Directory.env_vars(agent_dir)
     headers.each_with_object({}) do |(key, value), out|
       out[key] = interpolate(value.to_s, vars)
     end
@@ -80,27 +80,10 @@ module Remuda
     value.gsub(/\{\{(\w+)\}\}/) { vars[$1] || ENV[$1] || "" }
   end
 
-  def self.env_vars(agent_dir)
-    path = File.join(agent_dir, ".env")
-    return {} unless File.file?(path)
-
-    vars = {}
-    File.foreach(path) do |line|
-      line = line.strip
-      next if line.empty? || line.start_with?("#")
-
-      key, value = line.split("=", 2)
-      next unless key && value
-
-      vars[key] = value.gsub(/\A["']|["']\z/, "")
-    end
-    vars
-  end
-
   def self.env_token(agent_dir, server)
-    vars = env_vars(agent_dir)
+    vars = Directory.env_vars(agent_dir)
     token = vars["#{server.upcase}_MCP_TOKEN"] || vars["MCP_TOKEN"]
     token.nil? || token.empty? ? nil : token
   end
-  private_class_method :mcp_config, :server_url, :server_headers, :interpolate, :env_vars, :env_token
+  private_class_method :mcp_config, :server_url, :server_headers, :interpolate, :env_token
 end

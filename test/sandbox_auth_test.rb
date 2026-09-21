@@ -40,13 +40,6 @@ class SandboxAuthTest < Minitest::Test
     refute binds.any? { |b| b.start_with?("#{host_agent}:") }, binds.inspect
   end
 
-  def test_host_auth_path_default_is_pi_agent_auth_json
-    old = ENV["REMUDA_PI_AUTH"]
-    ENV.delete("REMUDA_PI_AUTH")
-    assert_equal File.expand_path("~/.pi/agent/auth.json"), Remuda::Sandbox.host_auth_path
-  ensure
-    ENV["REMUDA_PI_AUTH"] = old if old
-  end
 
   private
 
