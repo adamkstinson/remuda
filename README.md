@@ -139,9 +139,9 @@ result = Remuda.agent("Reply with the single word pong.")
 puts result.output
 ```
 
-v1 batch runs Pi with `--offline` and does not yet stage host `auth.json` into
-the box, so this does not call a model provider until that wiring exists.
-Steps still record.
+The runner copies host `~/.pi/agent/auth.json` (or `REMUDA_PI_AUTH`) into a
+per-invocation tmpdir and bind-mounts it at `/tmp/pi` (`PI_CODING_AGENT_DIR`).
+It does **not** pass `--offline`. The agent `.env` is never mounted.
 
 Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens (e.g.
 planet-mcp) may live there; the file is never mounted into the sandbox.
@@ -212,9 +212,9 @@ That is `docker run --rm -it` of `remuda-pi:<gem-version>`. Same sandbox
 
 `.env` and `.remuda/db/` are **not** mounted.
 
-Provider login does **not** belong in this box. Log in with **host** `pi`
-(`~/.pi/auth.json`). Remuda does not yet copy that file into the sandbox, so
-a login inside `remuda` is lost when you quit.
+Provider login is **host** `pi` (`~/.pi/agent/auth.json`). Remuda copies that
+file into the sandbox for the invocation; a login *inside* the box is lost
+when the container exits.
 
 ## CLI (v1)
 
