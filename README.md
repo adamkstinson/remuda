@@ -139,18 +139,14 @@ result = Remuda.agent("Reply with the single word pong.")
 puts result.output
 ```
 
-Model auth is **per agent**, not one host login for the whole box. The runner
-reads the agent `.env` on the host and stages a Pi `auth.json` into a
-per-invocation tmpdir at `/tmp/pi` (`PI_CODING_AGENT_DIR`). It does **not**
-pass `--offline`. The agent `.env` is never mounted.
+Model auth is **per agent**. The sandbox sets `PI_CODING_AGENT_DIR` to
+`/agent/.pi/agent` (the host agent’s `.pi/agent/`). That folder is this
+agent’s Pi user dir (`auth.json`, sessions, model catalog). It does **not**
+pass `--offline`. The agent `.env` is never mounted. Host `~/.pi/agent` is
+not used.
 
-Resolution order (no host login fallback — each agent owns its credentials):
-
-1. `REMUDA_PI_AUTH` (explicit file, one-off)
-2. `<agent>/.pi/agent/auth.json` (Pi’s normal file, this agent’s copy)
-3. `<agent>/.pi/auth.json`
-4. API keys in the agent `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
-   `GEMINI_API_KEY`, …) plus `PI_PROVIDER` / `PI_MODEL`
+Put credentials in `<agent>/.pi/agent/auth.json`, or in the agent `.env`
+(`PI_PROVIDER` / `PI_MODEL` plus that provider’s API key).
 
 ```bash
 # in the agent's .env (gitignored)
