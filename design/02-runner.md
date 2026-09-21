@@ -80,7 +80,7 @@ result object. SDK/RPC are out: SDK is Node; RPC is a long-lived peer; one-shot
 `agent` is print mode.
 
 **Interactive (`remuda`):** same image, argv is `pi` (TUI), TTY attached.
-Unrecorded in v0.
+Pi writes sessions under `/agent/.pi/agent/sessions` (the agent’s user folder).
 
 The prompt for batch is a **0600 file in a 0700 tmpdir**, mounted read-only —
 never argv (`MAX_ARG_STRLEN` is 128KiB; Agentworks Ops died on this).
@@ -102,8 +102,9 @@ Shared HostConfig builder; two wait paths:
 | output | JSONL → result | none (human) |
 
 Hardening: read-only rootfs, `cap-drop ALL`, `no-new-privileges`, pids/memory/cpu
-limits, tmpfs for `/tmp` and `PI_CODING_AGENT_DIR`, uid `1000:1000` so `files/`
-come back as the operator.
+limits, tmpfs for `/tmp` only — **not** for `PI_CODING_AGENT_DIR`. That dir is
+the agent’s `.pi/agent/` (mounted at `/agent/.pi/agent`). uid `1000:1000` so
+`files/` and `.pi/agent/` come back as the operator.
 
 Interactive spawn may shell out to `docker run --rm -it` if API attach is
 miserable; hung TTY is Ctrl-C. Do not split the mount/limit/env builder.
@@ -117,7 +118,6 @@ The agent directory is not one writable “brain.”
 | `AGENTS.md`, `.pi/`, skills, `files/` | `/agent` rw | rw | rw |
 | `.remuda/workflows/` | `/agent/.remuda/workflows` | **ro** | rw |
 | prompt file | `/run/remuda/prompt.txt` | ro | — |
-| staged `auth.json` | `/run/remuda/pi-auth.json` | ro | ro |
 | remuda Pi profile | in the image (or a ro mount) | ro | ro |
 | `mcp.json` | `/agent/mcp.json` | ro, secret-free | ro |
 | `.remuda/db/` | **not mounted** | | |
@@ -125,8 +125,9 @@ The agent directory is not one writable “brain.”
 | `.env` | **not mounted** | | |
 | `.remuda/bin/`, `Gemfile` | not mounted | | |
 
-Pi memory stays files. A jailbroken Pi can trash `files/`; it cannot rewrite
-run history or steal host MCP tokens.
+Pi memory stays files. A jailbroken Pi can trash `files/` and `.pi/agent/`
+(including `auth.json`); it cannot rewrite run history or steal host MCP
+tokens. Do not copy `~/.pi/agent` into an agent directory.
 
 ## Auth and network (v0)
 
@@ -138,9 +139,14 @@ not the rest of the file. The image wires Pi's HTTP client through that proxy
 (Node will not honor `HTTPS_PROXY` by itself) and trusts the CA. Build that
 as if all sandbox HTTPS will go through the gateway.
 
-**Laptop / v0 model auth:** harness-level Pi `auth.json`, staged into a tmpdir,
-mounted read-only, copied onto tmpfs. The container never sees the host home.
-This is a shortcut, not the client path (model keys at the edge too).
+**Per-agent Pi user folder.** `PI_CODING_AGENT_DIR=/agent/.pi/agent` — the
+host path `<agent>/.pi/agent/`. That is this agent’s `auth.json`, `sessions/`,
+`models-store.json` (catalog/pricing), and `settings.json`. Same documents Pi
+already uses; not a Remuda reimplementation; not the operator’s
+`~/.pi/agent`. `.env` is still never mounted; if the agent has API keys only
+in `.env`, the runner may synthesize a tmp `auth.json` into that folder or a
+staging dir (08). MCP tokens stay in `.env` + `mcp.json`; channel tokens stay
+in `.env` + `.remuda/channels.yml`.
 
 Launcher also sets invocation env (`AGENT_PROMPT_FILE`, `AGENT_MODEL`,
 `AGENT_SESSION_ID`, `PI_CODING_AGENT_DIR`).
@@ -149,9 +155,12 @@ Network on in v0 (the model API has to be reached until the gateway takes it).
 `--network host` is a laptop shortcut for localhost MCP and a hole; default
 bridge + explicit MCP routes is the next tightening.
 
-Batch sessions are ephemeral (`--no-session`) unless a workflow passes a
-session id for a follow-up `Remuda.agent` in the same run. Interactive sessions,
-if kept, live under `files/` (agent memory), not the DB.
+Batch `Remuda.agent` still passes `--no-session` unless a workflow asks for a
+session id (follow-up in the same run). The **queryable** record of that turn
+is the `workflow_steps` row, parsed from Pi’s `--mode json` stream (text, tool
+events, usage). Interactive `remuda` does not pass `--no-session`; Pi persists
+under `.pi/agent/sessions`. SQLite is not Pi’s session disk. A later index of
+JSONL into tables is optional (05).
 
 ## Interface sketch
 
@@ -171,8 +180,8 @@ remuda console  # not the sandbox — IRB, see 07
   (what merges, what overrides).
 - Network policy past v0: host network vs default bridge vs MCP/provider
   allowlist vs gateway as the only egress (08: image wiring assumes the last).
-- Whether interactive `remuda` sessions are recorded (as runs, or only as
-  files under `files/`). v0: unrecorded.
+- Whether to index `.pi/agent/sessions` JSONL into SQLite for ad-hoc SQL, or
+  query files + `workflow_steps` only.
 - `Remuda.agent` result object: exact fields we normalize from Pi JSONL.
 - Whether `mcp.json` belongs in the box at all in v0 (secret-free URLs to
   self-hosted MCP are consistent with credential-at-the-edge; third-party MCP

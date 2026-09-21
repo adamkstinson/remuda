@@ -81,11 +81,14 @@ process's runbook, not Remuda design.
 
 Pi-only makes this one credential class instead of one per coding agent.
 
-**Laptop / fleet v0:** provider auth is **per agent**. Each agent keeps its
-own Pi `auth.json` at `<agent>/.pi/agent/auth.json` (same document as
-`~/.pi/agent/auth.json`, not a copy of the host login). Alternatively the
-runner reads `PI_PROVIDER` / `PI_MODEL` and that provider's API key from the
-agent `.env` on the host and stages a tmp `auth.json`. It never mounts `.env`.
+**Laptop / fleet v0:** provider auth is **per agent**. The sandbox sets
+`PI_CODING_AGENT_DIR=/agent/.pi/agent` (host `<agent>/.pi/agent/`). That folder
+is this agent’s Pi user dir: `auth.json`, `models-store.json` (catalog/pricing),
+`sessions/`, `settings.json`. Same files Pi already uses. Not a copy of
+`~/.pi/agent`. Not MCP (that is `.env` + `mcp.json`) and not channel tokens
+(`.env` + `.remuda/channels.yml`). Alternatively the runner reads
+`PI_PROVIDER` / `PI_MODEL` and that provider's API key from the agent `.env`
+on the host and writes `auth.json` into that folder. It never mounts `.env`.
 It never reads the operator's `~/.pi/agent/auth.json`. A leaked provider token
 spends money; a leaked service token reads your email — triage v0 accordingly.
 
@@ -139,8 +142,9 @@ checks) is fleet/runbook territory. Remuda only aims the box at the tuple.
 - Third-party SaaS tokens never live in the agent directory.
 - OAuth is human-performed, vault-stored, auto-refreshed. Agents cannot
   self-authorize.
-- Laptop / v0 model auth: staged harness `auth.json`. Not the client path —
-  clients get model keys at the edge too.
+- Laptop / v0 model auth: per-agent `.pi/agent/auth.json` (Pi user dir mapped
+  into the sandbox). Not the client path — clients get model keys at the edge
+  too.
 
 ## Open (later)
 
