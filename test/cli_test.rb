@@ -59,6 +59,34 @@ class CliTest < Minitest::Test
     assert_includes %w[ok skipped], run.status
   end
 
+  # Break this catches: remuda schedule only exists as console/SQL.
+  def test_remuda_schedule_inserts_row_without_console
+    assert File.file?(EXE), "expected exe/remuda in the gem"
+
+    status, output = invoke("schedule", DUMMY, "hello", "--cron", "0 7 * * *")
+    assert_equal 0, status, output
+    assert_match(/scheduled hello 0 7 \* \* \*/, output)
+    assert_match(%r{\* \* \* \* \* cd #{Regexp.escape(DUMMY)} && bundle exec remuda tick}, output)
+    refute_match(/\.agentworks\/bin\/tick/, output)
+
+    Remuda::Db.connect(DUMMY)
+    row = Remuda::Schedule.find_by(workflow: "hello")
+    refute_nil row, "expected a schedules row from remuda schedule"
+    assert_equal "0 7 * * *", row.cron
+    assert_equal "UTC", row.timezone
+    refute row.paused
+    refute_nil row.next_occurrence
+  end
+
+  def test_remuda_schedule_rejects_invalid_cron
+    status, output = invoke("schedule", DUMMY, "hello", "--cron", "not-a-cron")
+    assert_equal 1, status, output
+    assert_match(/invalid cron/, output)
+
+    Remuda::Db.connect(DUMMY)
+    assert_nil Remuda::Schedule.find_by(workflow: "hello")
+  end
+
   # Break this catches: CLI copied into the dummy agent.
   def test_dummy_does_not_contain_cli_binary
     refute File.exist?(File.join(DUMMY, "exe")), "dummy must not contain exe/"

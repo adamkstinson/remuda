@@ -25,6 +25,12 @@ module Remuda
         console
       when "tools"
         show_tools
+      when "schedule"
+        schedule_workflow
+      when "unschedule"
+        unschedule_workflow
+      when "schedules"
+        list_schedules
       when "version", "--version", "-v"
         $stdout.puts VERSION
       when "help", "--help", "-h"
@@ -100,6 +106,73 @@ module Remuda
       [nil, first]
     end
 
+    def schedule_workflow
+      positional, flags = take_flags
+      path, workflow = path_and_name_from(positional)
+      raise ArgumentError, "usage: remuda schedule [PATH] WORKFLOW --cron EXPR" if workflow.nil? || workflow.empty?
+      raise ArgumentError, "usage: remuda schedule [PATH] WORKFLOW --cron EXPR" if flags[:cron].nil? || flags[:cron].empty?
+
+      dir = Directory.find(path)
+      row = Scheduler.upsert(
+        dir,
+        workflow: workflow,
+        cron: flags[:cron],
+        timezone: flags[:timezone] || "UTC"
+      )
+      $stdout.puts "scheduled #{row.workflow} #{row.cron} #{row.timezone} next=#{row.next_occurrence}"
+      $stdout.puts Scheduler.crontab_line(dir)
+    end
+
+    def unschedule_workflow
+      path, workflow = parse_path_and_name
+      raise ArgumentError, "usage: remuda unschedule [PATH] WORKFLOW" if workflow.nil? || workflow.empty?
+
+      dir = Directory.find(path)
+      Scheduler.remove(dir, workflow: workflow)
+      $stdout.puts "unscheduled #{workflow}"
+    end
+
+    def list_schedules
+      dir = Directory.find(@argv.shift)
+      rows = Scheduler.list(dir)
+      if rows.empty?
+        $stdout.puts "no schedules"
+      else
+        rows.each do |row|
+          paused = row.paused ? " paused" : ""
+          $stdout.puts "#{row.workflow} #{row.cron} #{row.timezone} next=#{row.next_occurrence}#{paused}"
+        end
+      end
+      $stdout.puts Scheduler.crontab_line(dir)
+    end
+
+    def take_flags
+      flags = {}
+      positional = []
+      until @argv.empty?
+        arg = @argv.shift
+        case arg
+        when "--cron"
+          flags[:cron] = @argv.shift
+        when "--timezone"
+          flags[:timezone] = @argv.shift
+        when /\A--/
+          raise ArgumentError, "unknown flag: #{arg}"
+        else
+          positional << arg
+        end
+      end
+      [positional, flags]
+    end
+
+    def path_and_name_from(positional)
+      case positional.size
+      when 2 then positional
+      when 1 then [nil, positional[0]]
+      else [nil, nil]
+      end
+    end
+
     def parse_path_and_name
       first = @argv.shift
       second = @argv.shift
@@ -111,6 +184,11 @@ module Remuda
         remuda new [PATH]            scaffold an agent directory (skip existing files)
         remuda run [PATH] WORKFLOW   run a workflow through the Runner
         remuda tick [PATH]           fire due schedules through the same Runner
+        remuda schedule [PATH] WORKFLOW --cron EXPR
+                                     insert or replace a schedules row; print crontab line
+        remuda unschedule [PATH] WORKFLOW
+                                     delete that workflow's schedules row
+        remuda schedules [PATH]      list schedules and the crontab line
         remuda tools [PATH] [NAME]   list MCP tool names, or show one tool
         remuda version
         remuda help
