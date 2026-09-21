@@ -28,9 +28,10 @@ class InteractiveTest < Minitest::Test
     home = env.find { |e| e.start_with?("HOME=") }
     refute_nil home, "HOME must be set so Pi does not mkdir /.pi"
     refute_equal "HOME=/", home
-    assert env.any? { |e| e.start_with?("PI_CODING_AGENT_DIR=") }
+    assert_includes env, "PI_CODING_AGENT_DIR=/agent/.pi/agent"
     tmpfs = spec.dig("HostConfig", "Tmpfs") || {}
-    assert tmpfs.key?("/tmp"), "expected tmpfs on /tmp for HOME/PI_CODING_AGENT_DIR"
+    assert tmpfs.key?("/tmp"), "expected tmpfs on /tmp for HOME"
+    refute tmpfs.key?("/agent/.pi/agent")
   end
 
   def test_cli_bare_invokes_sandbox_attach

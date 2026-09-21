@@ -26,7 +26,7 @@ class PiAuthTest < Minitest::Test
 
       prompt = File.join(agent, "prompt.txt")
       File.write(prompt, "hi")
-      spec = Remuda::Sandbox.batch_spec(agent, prompt_path: prompt, auth_dir: "/tmp/fake-auth")
+      spec = Remuda::Sandbox.batch_spec(agent, prompt_path: prompt)
       assert_equal "anthropic", spec["Cmd"][spec["Cmd"].index("--provider") + 1]
       assert_equal "claude-sonnet-4-5", spec["Cmd"][spec["Cmd"].index("--model") + 1]
       binds = spec.dig("HostConfig", "Binds") || []
