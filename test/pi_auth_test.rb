@@ -34,6 +34,32 @@ class PiAuthTest < Minitest::Test
     end
   end
 
+  def test_agent_pi_agent_auth_json_is_used_in_place
+    with_agent do |agent|
+      owned = File.join(agent, ".pi", "agent")
+      FileUtils.mkdir_p(owned)
+      File.write(File.join(owned, "auth.json"), '{"google":{"type":"api_key","key":"agent-owned"}}')
+
+      Dir.mktmpdir("stage") do |stage|
+        auth_dir = Remuda::PiAuth.stage(stage, agent)
+        assert_equal owned, auth_dir
+        creds = JSON.parse(File.read(File.join(auth_dir, "auth.json")))
+        assert_equal "agent-owned", creds.dig("google", "key")
+      end
+    end
+  end
+
+  def test_does_not_fall_back_to_host_login
+    with_agent do |agent|
+      old = ENV["REMUDA_PI_AUTH"]
+      ENV.delete("REMUDA_PI_AUTH")
+      assert_nil Remuda::PiAuth.resolve(agent),
+                 "must not copy ~/.pi/agent/auth.json into an agent that has no creds"
+    ensure
+      old.nil? ? ENV.delete("REMUDA_PI_AUTH") : ENV["REMUDA_PI_AUTH"] = old
+    end
+  end
+
   def test_agent_pi_auth_json_wins_over_env_keys
     with_agent do |agent|
       File.write(File.join(agent, ".env"), "ANTHROPIC_API_KEY=from-env\n")
