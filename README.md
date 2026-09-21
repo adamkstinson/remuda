@@ -168,35 +168,29 @@ run is in progress (`Current.run`).
 
 ## Schedule a workflow
 
-There is no `remuda schedule` command in v1. Insert a row, then tick.
-
 ```bash
-bundle exec remuda console
+bundle exec remuda schedule hello --cron "0 7 * * *"
+bundle exec remuda schedule ./ops hello --cron "10 */6 * * *" --timezone America/Los_Angeles
+bundle exec remuda schedules
+bundle exec remuda unschedule hello
 ```
 
-```ruby
-Schedule.create!(
-  workflow: "hello",
-  cron: "0 7 * * *",
-  timezone: "UTC",
-  next_occurrence: Time.now.utc,
-  paused: false
-)
+That inserts (or replaces) a `schedules` row in the agent's SQLite. One row per
+workflow name. `--timezone` defaults to UTC. The command prints the row and a
+copy-pasteable crontab line that runs Remuda tick (not `.agentworks/bin/tick`):
+
+```cron
+* * * * * cd /path/to/ops && bundle exec remuda tick >> /path/to/ops/.remuda/tick.log 2>&1
 ```
+
+No daemon. Install that one line on the host crontab. Tick fires unpaused rows
+with `next_occurrence <= now` through the same Runner (`trigger: "schedule"`),
+then advances `last_occurrence` / `next_occurrence`. If that workflow still has
+a `running` row, the new run is `skipped`.
 
 ```bash
 bundle exec remuda tick           # inside the agent
 bundle exec remuda tick ./ops
-```
-
-Tick fires unpaused rows with `next_occurrence <= now` through the same Runner
-(`trigger: "schedule"`), then advances `last_occurrence` / `next_occurrence`.
-If that workflow still has a `running` row, the new run is `skipped`.
-
-No daemon. Cron the tick yourself, e.g. every minute:
-
-```cron
-* * * * * cd /path/to/ops && bundle exec remuda tick
 ```
 
 ## Interactive Pi (sandboxed)
@@ -229,13 +223,16 @@ a login inside `remuda` is lost when you quit.
 | `remuda new [PATH]` | Scaffold an agent directory |
 | `remuda run [PATH] WORKFLOW` | Run `.remuda/workflows/WORKFLOW.rb` once, recorded |
 | `remuda tick [PATH]` | Fire due schedules through the same Runner |
+| `remuda schedule [PATH] WORKFLOW --cron EXPR` | Insert/replace a schedules row; print crontab line |
+| `remuda unschedule [PATH] WORKFLOW` | Delete that workflow's schedules row |
+| `remuda schedules [PATH]` | List schedules and the crontab line |
 | `remuda tools [PATH] [NAME]` | List MCP tool names from `mcp.json`, or print one tool |
 | `remuda console [PATH]` | IRB on this agent's SQLite |
 | `remuda` | Sandboxed Pi (must already be in an agent directory) |
 | `remuda version` | Gem version |
 | `remuda help` | Subcommands (`console` and bare `remuda` are omitted from help) |
 
-Not shipped: `remuda schedule`, channels. There is no `remuda generate` — add workflow scripts and skills as ordinary files.
+Not shipped: channels. There is no `remuda generate` — add workflow scripts and skills as ordinary files.
 
 ## Boundaries
 
