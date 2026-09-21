@@ -22,7 +22,9 @@ agent, and nothing that runs agents in general.
   in the gem, not here. No `app/models`.
 - **Harness state in the DB, agent memory in files.** Ledgers, notes, and
   other identity-adjacent files stay under `files/` (or
-  `.remuda/workflows/lib/` for Ruby helpers). Agents do not add tables.
+  `.remuda/workflows/lib/` for Ruby helpers). Pi’s **user folder** is
+  `.pi/agent/` in this directory (auth, sessions, model catalog) — see
+  [02-runner](./02-runner.md). Agents do not add tables.
 - **Portable as a specification**: copy the directory, `bundle install`, run.
   Air-gap via `vendor/bundle`, which is a deployment mode, not the
   architecture.
@@ -33,7 +35,7 @@ agent, and nothing that runs agents in general.
 my-agent/
 ├── AGENTS.md                 ← identity (Pi reads this). Always this name.
 ├── mcp.json                  ← MCP servers this agent uses
-├── .pi/                      ← agent-level Pi config: skills, extensions, tools
+├── .pi/                      ← project Pi: skills, extensions; user dir at .pi/agent/
 ├── Gemfile / Gemfile.lock    ← names the harness version
 ├── .env                      ← secrets slots (gitignored)
 ├── files/                    ← the agent's working files / memory
@@ -46,6 +48,11 @@ my-agent/
 
 **Root** — what you or Pi look at: `AGENTS.md`, `mcp.json`, `.pi/`, `Gemfile`,
 `.env`, `files/`.
+
+**`.pi/agent/`** — this agent’s Pi user folder (`PI_CODING_AGENT_DIR`). Same
+shape as `~/.pi/agent` (`auth.json`, `sessions/`, `models-store.json`,
+`settings.json`). Not a copy of the operator’s login. `auth.json` is
+gitignored.
 
 **`.remuda/`** — harness instance: db, workflows, channels, binstubs.
 

@@ -32,10 +32,15 @@ Harness state in the database, agent memory in files.
 
 - **The boundary rule:** rows the *harness* writes (runs, steps, schedules,
   cursors) live in the DB. Files the *agent* writes as its own memory (e.g.
-  Ops's `state/operate/*.jsonl` ledgers) stay files in the directory — they
-  are identity-adjacent, not harness plumbing. The sandbox never mounts `.remuda/db/`
-  ([02-runner](./02-runner.md)); only the host gem writes these rows.
-  `.remuda/` as a whole is not a sandbox mount.
+  Ops's `state/operate/*.jsonl` ledgers, Pi’s `.pi/agent/sessions`) stay files
+  in the directory — they are identity-adjacent, not harness plumbing. The
+  sandbox never mounts `.remuda/db/` ([02-runner](./02-runner.md)); only the
+  host gem writes these rows. `.remuda/` as a whole is not a sandbox mount.
+  Pi does not write SQLite.
+- **Query.** `remuda console` on `workflow_runs` / `workflow_steps` (parsed
+  from Pi JSONL: text, tool events, usage). Pi chats live in
+  `.pi/agent/sessions`. Do not make SQLite Pi’s session store. An optional
+  later index of JSONL into tables is a read model, not the writer.
 - **Agents do not add tables.** No extra migrations per directory. Agent data
   is files until proven otherwise.
 - **Inspection is `remuda console`** — IRB with this agent's models loaded
@@ -49,3 +54,4 @@ Harness state in the database, agent memory in files.
   migrate with history intact.
 - Step payload size: full tool results inline, or truncate + blob/file
   spillover past a threshold?
+- Optional SQL index of `.pi/agent/sessions` JSONL (read model only).
