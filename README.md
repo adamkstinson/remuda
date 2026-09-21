@@ -144,13 +144,13 @@ reads the agent `.env` on the host and stages a Pi `auth.json` into a
 per-invocation tmpdir at `/tmp/pi` (`PI_CODING_AGENT_DIR`). It does **not**
 pass `--offline`. The agent `.env` is never mounted.
 
-Resolution order:
+Resolution order (no host login fallback — each agent owns its credentials):
 
-1. `REMUDA_PI_AUTH` (explicit file)
-2. `<agent>/.pi/auth.json`
-3. API keys in the agent `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+1. `REMUDA_PI_AUTH` (explicit file, one-off)
+2. `<agent>/.pi/agent/auth.json` (Pi’s normal file, this agent’s copy)
+3. `<agent>/.pi/auth.json`
+4. API keys in the agent `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
    `GEMINI_API_KEY`, …) plus `PI_PROVIDER` / `PI_MODEL`
-4. host `~/.pi/agent/auth.json` (laptop fallback)
 
 ```bash
 # in the agent's .env (gitignored)

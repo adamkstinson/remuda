@@ -47,6 +47,7 @@ module Remuda
     def self.stage(tmpdir, agent_dir)
       source = resolve(agent_dir)
       return nil unless source
+      return source[:dir] if source[:dir]
 
       dir = File.join(tmpdir, "pi-agent")
       FileUtils.mkdir_p(dir)
@@ -65,14 +66,15 @@ module Remuda
       override = blank_to_nil(ENV["REMUDA_PI_AUTH"])
       return { file: override } if override && File.file?(override)
 
-      agent_auth = File.join(File.expand_path(agent_dir), ".pi", "auth.json")
-      return { file: agent_auth } if File.file?(agent_auth)
+      root = File.expand_path(agent_dir)
+      agent_pi = File.join(root, ".pi", "agent")
+      return { dir: agent_pi } if File.file?(File.join(agent_pi, "auth.json"))
+
+      flat = File.join(root, ".pi", "auth.json")
+      return { file: flat } if File.file?(flat)
 
       synthesized = from_env(env_vars(agent_dir))
       return { json: synthesized } if synthesized
-
-      host = File.expand_path("~/.pi/agent/auth.json")
-      return { file: host } if File.file?(host)
 
       nil
     end
