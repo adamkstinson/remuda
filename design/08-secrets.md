@@ -81,13 +81,13 @@ process's runbook, not Remuda design.
 
 Pi-only makes this one credential class instead of one per coding agent.
 
-**Laptop / v0:** provider auth is **harness-level, not agent-level**. The
-runner stages the operator's Pi `auth.json` into a tmpdir and mounts it
-read-only; the entrypoint copies it onto tmpfs. Which *model* an agent uses is
-agent config; which *provider account* pays for it is an operator/machine
-concern, same as which Docker daemon runs the container. A leaked provider
-token spends money; a leaked service token reads your email — triage v0
-accordingly.
+**Laptop / fleet v0:** provider auth is **per agent**. The runner reads the
+agent `.env` on the host (`PI_PROVIDER`, `PI_MODEL`, and that provider's API
+key env) or copies `<agent>/.pi/auth.json`, stages a Pi `auth.json` into a
+tmpdir, and bind-mounts it at `/tmp/pi`. It never mounts `.env`. Last fallback
+is the operator's `~/.pi/agent/auth.json` (one laptop login). Each client
+agent carries its own key. A leaked provider token spends money; a leaked
+service token reads your email — triage v0 accordingly.
 
 **Do not freeze that as the client path.** The client story is the same
 gateway: model traffic through the proxy, placeholder in the box, real key at
