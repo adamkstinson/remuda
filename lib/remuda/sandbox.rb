@@ -16,7 +16,7 @@ module Remuda
         prompt_path = File.join(tmpdir, "prompt.txt")
         File.write(prompt_path, prompt.to_s)
         File.chmod(0o644, prompt_path)
-        auth_dir = stage_auth_dir(tmpdir)
+        auth_dir = PiAuth.stage(tmpdir, agent_dir)
 
         container = Docker::Container.create(
           batch_spec(agent_dir, prompt_path: prompt_path, auth_dir: auth_dir)
@@ -41,16 +41,21 @@ module Remuda
 
     def self.batch_spec(agent_dir, prompt_path:, auth_dir: nil)
       agent_dir = File.expand_path(agent_dir)
+      cmd = [
+        "--mode", "json",
+        "--print",
+        "--approve",
+        "--no-session",
+        "@/run/remuda/prompt.txt"
+      ]
+      provider = PiAuth.provider(agent_dir)
+      model = PiAuth.model(agent_dir)
+      cmd.push("--provider", provider) if provider
+      cmd.push("--model", model) if model
       {
         "Image" => Image.tag,
         "Entrypoint" => ["pi"],
-        "Cmd" => [
-          "--mode", "json",
-          "--print",
-          "--approve",
-          "--no-session",
-          "@/run/remuda/prompt.txt"
-        ],
+        "Cmd" => cmd,
         "WorkingDir" => "/agent",
         "User" => "#{Process.uid}:#{Process.gid}",
         "Env" => sandbox_env("AGENT_PROMPT_FILE=/run/remuda/prompt.txt"),
@@ -85,17 +90,11 @@ module Remuda
       }
     end
 
-    def self.host_auth_path
-      override = ENV["REMUDA_PI_AUTH"]
-      return override if override && !override.empty?
-
-      File.expand_path("~/.pi/agent/auth.json")
-    end
-
     def self.attach(agent_dir)
+      agent_dir = File.expand_path(agent_dir)
       tmpdir = Dir.mktmpdir("remuda-pi-auth")
       File.chmod(0o700, tmpdir)
-      auth_dir = stage_auth_dir(tmpdir)
+      auth_dir = PiAuth.stage(tmpdir, agent_dir)
       spec = interactive_spec(agent_dir, auth_dir: auth_dir)
       args = [
         "docker", "run", "--rm", "-it",
@@ -133,20 +132,6 @@ module Remuda
       "rw,nosuid,size=64m,uid=#{Process.uid},gid=#{Process.gid}"
     end
     private_class_method :tmpfs_flags
-
-    def self.stage_auth_dir(tmpdir)
-      src = host_auth_path
-      return nil unless src && File.file?(src)
-
-      dir = File.join(tmpdir, "pi-agent")
-      FileUtils.mkdir_p(dir)
-      File.chmod(0o700, dir)
-      dest = File.join(dir, "auth.json")
-      FileUtils.cp(src, dest)
-      File.chmod(0o600, dest)
-      dir
-    end
-    private_class_method :stage_auth_dir
 
     def self.binds(agent_dir, prompt_path: nil, auth_dir: nil, workflows_mode: "ro")
       mounts = []

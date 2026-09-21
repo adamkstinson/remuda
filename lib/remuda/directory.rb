@@ -19,5 +19,22 @@ module Remuda
       path = File.join(dir, "Gemfile")
       File.file?(path) && File.read(path).match?(/\bgem\s+["']remuda["']/)
     end
+
+    def self.env_vars(dir)
+      path = File.join(File.expand_path(dir), ".env")
+      return {} unless File.file?(path)
+
+      vars = {}
+      File.foreach(path) do |line|
+        line = line.strip
+        next if line.empty? || line.start_with?("#")
+
+        key, value = line.split("=", 2)
+        next unless key && value
+
+        vars[key] = value.gsub(/\A["']|["']\z/, "")
+      end
+      vars
+    end
   end
 end

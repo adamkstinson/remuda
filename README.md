@@ -139,9 +139,25 @@ result = Remuda.agent("Reply with the single word pong.")
 puts result.output
 ```
 
-The runner copies host `~/.pi/agent/auth.json` (or `REMUDA_PI_AUTH`) into a
-per-invocation tmpdir and bind-mounts it at `/tmp/pi` (`PI_CODING_AGENT_DIR`).
-It does **not** pass `--offline`. The agent `.env` is never mounted.
+Model auth is **per agent**, not one host login for the whole box. The runner
+reads the agent `.env` on the host and stages a Pi `auth.json` into a
+per-invocation tmpdir at `/tmp/pi` (`PI_CODING_AGENT_DIR`). It does **not**
+pass `--offline`. The agent `.env` is never mounted.
+
+Resolution order:
+
+1. `REMUDA_PI_AUTH` (explicit file)
+2. `<agent>/.pi/auth.json`
+3. API keys in the agent `.env` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+   `GEMINI_API_KEY`, …) plus `PI_PROVIDER` / `PI_MODEL`
+4. host `~/.pi/agent/auth.json` (laptop fallback)
+
+```bash
+# in the agent's .env (gitignored)
+PI_PROVIDER=anthropic
+PI_MODEL=claude-sonnet-4-5
+ANTHROPIC_API_KEY=sk-ant-...
+```
 
 Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens (e.g.
 planet-mcp) may live there; the file is never mounted into the sandbox.
