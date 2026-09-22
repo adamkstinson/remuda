@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "fileutils"
+require "tmpdir"
 require "remuda"
 
 class InteractiveTest < Minitest::Test
@@ -32,6 +34,26 @@ class InteractiveTest < Minitest::Test
     tmpfs = spec.dig("HostConfig", "Tmpfs") || {}
     assert tmpfs.key?("/tmp"), "expected tmpfs on /tmp for HOME"
     refute tmpfs.key?("/agent/.pi/agent")
+  end
+
+  def test_interactive_does_not_pass_no_session
+    spec = Remuda::Sandbox.interactive_spec(DUMMY)
+    refute_includes Array(spec["Cmd"]), "--no-session"
+
+    args = Remuda::Sandbox.attach_args(DUMMY)
+    refute_includes args, "--no-session"
+    assert args.include?("PI_CODING_AGENT_DIR=/agent/.pi/agent") ||
+           args.each_cons(2).any? { |a, b| a == "-e" && b == "PI_CODING_AGENT_DIR=/agent/.pi/agent" }
+    assert File.directory?(File.join(DUMMY, ".pi", "agent", "sessions"))
+  end
+
+  def test_batch_agent_still_passes_no_session
+    Dir.mktmpdir("prompt") do |dir|
+      prompt = File.join(dir, "prompt.txt")
+      File.write(prompt, "hi")
+      spec = Remuda::Sandbox.batch_spec(DUMMY, prompt_path: prompt)
+      assert_includes spec["Cmd"], "--no-session"
+    end
   end
 
   def test_cli_bare_invokes_sandbox_attach
