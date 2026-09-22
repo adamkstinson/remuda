@@ -218,15 +218,17 @@ That is `docker run --rm -it` of `remuda-pi:<gem-version>`. Same sandbox
 
 | Survives on the host | Dies when the container exits |
 |---|---|
-| `AGENTS.md`, `mcp.json` | `/tmp` (tmpfs): Pi home, auth, default sessions |
-| `.pi/`, `files/` | the container rootfs (`--rm`) |
+| `AGENTS.md`, `mcp.json` | `/tmp` (tmpfs), including `HOME=/tmp/home` |
+| `.pi/` (this agent’s `auth.json`, sessions, model catalog) | the container rootfs (`--rm`) |
+| `files/` | |
 | `.remuda/workflows/` (writable in this interactive door) | |
 
 `.env` and `.remuda/db/` are **not** mounted.
 
-Provider login is **host** `pi` (`~/.pi/agent/auth.json`). Remuda copies that
-file into the sandbox for the invocation; a login *inside* the box is lost
-when the container exits.
+Model auth is **per agent**, same as `Remuda.agent`. The sandbox sets
+`PI_CODING_AGENT_DIR` to `/agent/.pi/agent` (the host agent’s `.pi/agent/`).
+It does **not** copy host `~/.pi/agent/auth.json`. A login inside the box
+writes to the agent’s `.pi/agent/` on the host and survives the container.
 
 ## CLI (v1)
 
