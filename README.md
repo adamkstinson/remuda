@@ -29,7 +29,7 @@ From a clone of this repo:
 git clone https://github.com/adamkstinson/remuda.git
 cd remuda
 bundle install
-bundle exec remuda version    # 0.1.0
+bundle exec remuda version    # 0.1.1
 ```
 
 In an agent's `Gemfile` (after `remuda new`, point at the git source or a
