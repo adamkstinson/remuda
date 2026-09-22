@@ -90,6 +90,10 @@ module Remuda
     end
 
     def self.attach(agent_dir)
+      exec(*attach_args(agent_dir))
+    end
+
+    def self.attach_args(agent_dir)
       agent_dir = File.expand_path(agent_dir)
       ensure_pi_agent_dir(agent_dir)
       spec = interactive_spec(agent_dir)
@@ -107,7 +111,7 @@ module Remuda
         args << "-v" << bind
       end
       args << spec["Image"]
-      exec(*args)
+      args
     end
 
     def self.sandbox_env(*extra)
@@ -132,7 +136,7 @@ module Remuda
 
     def self.ensure_pi_agent_dir(agent_dir)
       dir = File.join(File.expand_path(agent_dir), ".pi", "agent")
-      FileUtils.mkdir_p(dir)
+      FileUtils.mkdir_p(File.join(dir, "sessions"))
       dir
     end
     private_class_method :ensure_pi_agent_dir
