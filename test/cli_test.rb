@@ -66,7 +66,8 @@ class CliTest < Minitest::Test
     status, output = invoke("schedule", DUMMY, "hello", "--cron", "0 7 * * *")
     assert_equal 0, status, output
     assert_match(/scheduled hello 0 7 \* \* \*/, output)
-    assert_match(%r{\* \* \* \* \* cd #{Regexp.escape(DUMMY)} && bundle exec remuda tick}, output)
+    assert_match(%r{\* \* \* \* \* cd #{Regexp.escape(DUMMY)} && remuda tick}, output)
+    refute_match(/bundle exec/, output)
     refute_match(/\.agentworks\/bin\/tick/, output)
 
     Remuda::Db.connect(DUMMY)
