@@ -30,13 +30,7 @@ module Remuda
 
     agent_dir = Current.agent_dir || Dir.pwd
     spec = mcp_config(agent_dir).dig("mcpServers", server)
-    result = Mcp.call(
-      server_url(agent_dir, server),
-      name,
-      args,
-      token: env_token(agent_dir, server),
-      headers: server_headers(agent_dir, spec)
-    )
+    result = call_mcp(agent_dir, server, name, args, spec)
 
     if Current.run
       WorkflowStep.create!(
@@ -50,6 +44,38 @@ module Remuda
     end
 
     result
+  end
+
+  def self.call_mcp(agent_dir, server, name, args, spec)
+    attempt = 0
+    begin
+      attempt += 1
+      unwrap_mcp(
+        Mcp.call(
+          server_url(agent_dir, server),
+          name,
+          args,
+          token: env_token(agent_dir, server),
+          headers: server_headers(agent_dir, spec)
+        )
+      )
+    rescue StandardError => e
+      raise unless e.message.include?("429") && attempt < 5
+
+      sleep(10 * attempt)
+      retry
+    end
+  end
+
+  def self.unwrap_mcp(raw)
+    return raw unless raw.is_a?(Hash) && raw["content"].is_a?(Array)
+
+    text = raw.dig("content", 0, "text")
+    return raw if text.nil? || text.empty?
+
+    JSON.parse(text)
+  rescue JSON::ParserError
+    raw
   end
 
   def self.mcp_config(agent_dir)
@@ -85,5 +111,5 @@ module Remuda
     token = vars["#{server.upcase}_MCP_TOKEN"] || vars["MCP_TOKEN"]
     token.nil? || token.empty? ? nil : token
   end
-  private_class_method :mcp_config, :server_url, :server_headers, :interpolate, :env_token
+  private_class_method :call_mcp, :unwrap_mcp, :mcp_config, :server_url, :server_headers, :interpolate, :env_token
 end
