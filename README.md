@@ -29,7 +29,7 @@ From a clone of this repo:
 git clone https://github.com/adamkstinson/remuda.git
 cd remuda
 bundle install
-bundle exec remuda version    # 0.1.2
+bundle exec remuda version    # 0.1.3
 ```
 
 In an agent's `Gemfile` (after `remuda new`, point at the git source or a
@@ -141,17 +141,22 @@ puts result.output
 
 Model auth is **per agent**. The sandbox sets `PI_CODING_AGENT_DIR` to
 `/agent/.pi/agent` (the host agent’s `.pi/agent/`). That folder is this
-agent’s Pi user dir (`auth.json`, sessions, model catalog). It does **not**
-pass `--offline`. The agent `.env` is never mounted. Host `~/.pi/agent` is
-not used.
+agent’s Pi user dir (`auth.json`, sessions, model catalog, `settings.json`).
+It does **not** pass `--offline`. The agent `.env` is never mounted. Host
+`~/.pi/agent` is not used.
 
-Put credentials in `<agent>/.pi/agent/auth.json`, or in the agent `.env`
-(`PI_PROVIDER` / `PI_MODEL` plus that provider’s API key).
+`Remuda.agent` does not pass `--provider` / `--model`. Pi uses
+`defaultProvider` / `defaultModel` from that `settings.json` (set in
+interactive `remuda` with `/model`, Ctrl+S). Remuda does not declare a
+second default.
+
+Put credentials in `<agent>/.pi/agent/auth.json` (login inside `remuda`), or
+synthesize them from the agent `.env` (`PI_PROVIDER` plus that provider’s API
+key — which key to write, not which model to run).
 
 ```bash
-# in the agent's .env (gitignored)
+# in the agent's .env (gitignored) — auth shortcut only
 PI_PROVIDER=anthropic
-PI_MODEL=claude-sonnet-4-5
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 

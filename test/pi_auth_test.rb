@@ -7,7 +7,7 @@ require "tmpdir"
 require "remuda"
 
 class PiAuthTest < Minitest::Test
-  def test_env_keys_synthesize_auth_json_and_select_provider
+  def test_env_keys_synthesize_auth_json_without_selecting_model
     with_agent do |agent|
       File.write(File.join(agent, ".env"), <<~ENV)
         PI_PROVIDER=anthropic
@@ -27,8 +27,8 @@ class PiAuthTest < Minitest::Test
       prompt = File.join(agent, "prompt.txt")
       File.write(prompt, "hi")
       spec = Remuda::Sandbox.batch_spec(agent, prompt_path: prompt)
-      assert_equal "anthropic", spec["Cmd"][spec["Cmd"].index("--provider") + 1]
-      assert_equal "claude-sonnet-4-5", spec["Cmd"][spec["Cmd"].index("--model") + 1]
+      refute_includes spec["Cmd"], "--provider"
+      refute_includes spec["Cmd"], "--model"
       binds = spec.dig("HostConfig", "Binds") || []
       refute binds.any? { |b| b.include?("#{agent}/.env") }, binds.inspect
     end

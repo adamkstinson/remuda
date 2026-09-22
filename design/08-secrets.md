@@ -86,11 +86,13 @@ Pi-only makes this one credential class instead of one per coding agent.
 is this agent’s Pi user dir: `auth.json`, `models-store.json` (catalog/pricing),
 `sessions/`, `settings.json`. Same files Pi already uses. Not a copy of
 `~/.pi/agent`. Not MCP (that is `.env` + `mcp.json`) and not channel tokens
-(`.env` + `.remuda/channels.yml`). Alternatively the runner reads
-`PI_PROVIDER` / `PI_MODEL` and that provider's API key from the agent `.env`
-on the host and writes `auth.json` into that folder. It never mounts `.env`.
-It never reads the operator's `~/.pi/agent/auth.json`. A leaked provider token
-spends money; a leaked service token reads your email — triage v0 accordingly.
+(`.env` + `.remuda/channels.yml`). Alternatively the runner reads `PI_PROVIDER` and that provider's API key from
+the agent `.env` on the host and writes `auth.json` into that folder (which
+key to stage, not which model to run). `Remuda.agent` does not pass
+`--provider` / `--model`; Pi uses `defaultProvider` / `defaultModel` in that
+folder's `settings.json`. It never mounts `.env`. It never reads the
+operator's `~/.pi/agent/auth.json`. A leaked provider token spends money; a
+leaked service token reads your email — triage v0 accordingly.
 
 **Do not freeze that as the client path.** The client story is the same
 gateway: model traffic through the proxy, placeholder in the box, real key at

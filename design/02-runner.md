@@ -70,7 +70,7 @@ One image, independent of the gem version. Payload is Pi plus git/ripgrep/ca-cer
 **Batch (`Remuda.agent`):**
 
 ```
-pi --mode json --print --approve --no-session [--model …] [--session-id …]
+pi --mode json --print --approve --no-session
 ```
 
 `--approve` so `/agent/.pi` and `AGENTS.md` load. Ruby parses Pi's public
