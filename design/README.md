@@ -20,4 +20,4 @@ an open item get recorded as ADRs in `../adr/` when we start cutting code.
 | [11-rails.md](./11-rails.md) | Rails host — `agents/` fleet, named invoke, jobs not callbacks |
 
 Identified but not yet drafted: observability & the optimize loop,
-distribution & versioning (gem ↔ image ↔ Pi pinning).
+distribution (gem vs image vs Pi pin — image is its own asset).

@@ -3,9 +3,10 @@
 module Remuda
   module Image
     NAME = "remuda-pi"
+    TAG = "latest"
 
     def self.tag
-      "#{NAME}:#{VERSION}"
+      "#{NAME}:#{TAG}"
     end
   end
 end
