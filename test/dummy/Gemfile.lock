@@ -1,7 +1,7 @@
 PATH
   remote: ../..
   specs:
-    remuda (0.1.0)
+    remuda (0.1.1)
 
 GEM
   remote: https://rubygems.org/
@@ -15,7 +15,7 @@ DEPENDENCIES
   remuda!
 
 CHECKSUMS
-  remuda (0.1.0)
+  remuda (0.1.1)
 
 BUNDLED WITH
   4.0.16
