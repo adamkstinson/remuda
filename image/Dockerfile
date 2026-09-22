@@ -1,4 +1,4 @@
-# remuda-pi — Pi only. Tag: remuda-pi:<gem version>
+# remuda-pi — Pi only. Tag: remuda-pi:latest (not the gem version).
 FROM node:22-bookworm-slim
 
 RUN apt-get update \

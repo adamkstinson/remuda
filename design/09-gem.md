@@ -12,7 +12,7 @@ code. This is the tree; channels are in it even if we build them later.
 - **One `lib/remuda/`, not component gems.** Workflows, sandbox, scheduler,
   CLI share a tree. The workflow-feature file list was a slice, not a second
   package.
-- **Image co-versioned with the gem** (`image/Dockerfile` → `remuda-pi:<gem-version>`).
+- **Image is its own asset** (`image/Dockerfile` → `remuda-pi:latest`). Gem bumps do not retag it.
 - **Generators write agent files only** (`lib/remuda/templates/`).
 
 ## Tree
@@ -31,7 +31,7 @@ remuda/
 │   └── remuda                 # the one binary
 │
 ├── image/
-│   └── Dockerfile             # remuda-pi:<gem-version>
+│   └── Dockerfile             # remuda-pi:latest
 │
 ├── lib/
 │   ├── remuda.rb              # Remuda.tool, .agent, .inputs

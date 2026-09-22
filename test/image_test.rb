@@ -11,8 +11,9 @@ class ImageTest < Minitest::Test
     assert File.file?(DOCKERFILE), "expected image/Dockerfile"
   end
 
-  def test_image_tag_includes_gem_version
-    assert_equal "remuda-pi:#{Remuda::VERSION}", Remuda::Image.tag
+  def test_image_tag_is_stable_not_gem_version
+    assert_equal "remuda-pi:latest", Remuda::Image.tag
+    refute_includes Remuda::Image.tag, Remuda::VERSION
   end
 
   def test_image_is_pi_not_a_runtime_matrix

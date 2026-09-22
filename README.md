@@ -29,7 +29,7 @@ From a clone of this repo:
 git clone https://github.com/adamkstinson/remuda.git
 cd remuda
 bundle install
-bundle exec remuda version    # 0.1.1
+bundle exec remuda version    # 0.1.2
 ```
 
 In an agent's `Gemfile` (after `remuda new`, point at the git source or a
@@ -213,7 +213,7 @@ From **inside** an agent directory, no subcommand:
 bundle exec remuda
 ```
 
-That is `docker run --rm -it` of `remuda-pi:<gem-version>`. Same sandbox
+That is `docker run --rm -it` of `remuda-pi:latest`. Same sandbox
 `Remuda.agent` uses. Workflow Ruby and SQLite stay on the host.
 
 | Survives on the host | Dies when the container exits |

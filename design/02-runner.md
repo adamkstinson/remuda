@@ -32,10 +32,9 @@ the host. Two doors share one container definition:
   with operator authority) and **read-write** for interactive `remuda` (that
   is how you develop the agent). That is the one intentional break from
   identical mounts.
-- **Pi version is part of the harness version.** Gem version ↔ image tag ↔ Pi
-  version pin together, so an agent's behavior is reproducible from its
-  lockfile. The image is `remuda-pi:<gem-version>`; the agent directory does
-  not pin Pi itself.
+- **The image is its own asset.** `remuda-pi:latest`, built from
+  `image/Dockerfile`. Rebuild it when the Dockerfile or Pi pin changes, not
+  when the gem bumps. The agent directory does not pin Pi itself.
 - **Credential hygiene by construction**: real service credentials stay outside
   the container. `.env` is **never mounted**. `.remuda/db/` is **never
   mounted** — only the host gem writes SQLite. Do **not** mount `.remuda/` as
@@ -64,7 +63,7 @@ container:  pi --mode json --print --approve
 
 ## Image and wire
 
-One image, co-versioned with the gem. Payload is Pi plus git/ripgrep/ca-certs.
+One image, independent of the gem version. Payload is Pi plus git/ripgrep/ca-certs.
 `ENTRYPOINT` is `pi` (a tiny wrapper may stage `auth.json` onto tmpfs, then
 `exec pi`). No private JSON `run_done` protocol.
 
