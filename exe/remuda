@@ -1,6 +1,18 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# Inside an agent directory the command is `remuda`. The Gemfile's remuda
+# wins; bundle exec is how, not what you type. See Directory.agent?.
+if ENV["BUNDLE_BIN_PATH"].to_s.empty?
+  dir = Dir.pwd
+  gemfile = File.join(dir, "Gemfile")
+  if File.file?(File.join(dir, "AGENTS.md")) &&
+     File.file?(gemfile) &&
+     File.read(gemfile).match?(/\bgem\s+["']remuda["']/)
+    exec("bundle", "exec", "remuda", *ARGV)
+  end
+end
+
 require "remuda"
 
 begin

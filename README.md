@@ -29,7 +29,7 @@ From a clone of this repo:
 git clone https://github.com/adamkstinson/remuda.git
 cd remuda
 bundle install
-bundle exec remuda version    # 0.1.3
+bundle exec remuda version    # this repo is the gem, not an agent
 ```
 
 In an agent's `Gemfile` (after `remuda new`, point at the git source or a
@@ -44,8 +44,10 @@ gem "remuda", git: "https://github.com/adamkstinson/remuda.git"
 
 ```bash
 bundle install
-bundle exec remuda help
 ```
+
+Inside an agent directory the command is `remuda`. Not `bundle exec remuda`.
+`bundle exec` is only for working on this gem from its own clone.
 
 `PATH` on commands is an agent directory. Omit it when the current directory
 already is one (`AGENTS.md` plus a `Gemfile` that names `remuda`).
@@ -53,7 +55,7 @@ already is one (`AGENTS.md` plus a `Gemfile` that names `remuda`).
 ## Scaffold an agent
 
 ```bash
-bundle exec remuda new ./ops
+remuda new ./ops
 cd ops
 ```
 
@@ -87,8 +89,8 @@ puts "hello"
 ```
 
 ```bash
-bundle exec remuda run hello           # inside the agent
-bundle exec remuda run ./ops hello     # from elsewhere
+remuda run hello           # inside the agent
+remuda run ./ops hello     # from elsewhere
 ```
 
 That opens a `workflow_runs` row (`trigger: "manual"`), `load`s the script,
@@ -123,9 +125,9 @@ items.each { |item| warn item.inspect }
 See the catalog while writing a workflow:
 
 ```bash
-bundle exec remuda tools                      # server.method names
-bundle exec remuda tools list_work_items      # description + schema
-bundle exec remuda tools ./ops plane.list_work_items
+remuda tools                      # server.method names
+remuda tools list_work_items      # description + schema
+remuda tools ./ops plane.list_work_items
 ```
 
 ### `Remuda.agent(prompt)`
@@ -168,8 +170,8 @@ planet-mcp) may live there; the file is never mounted into the sandbox.
 IRB on this agent's SQLite — not Pi.
 
 ```bash
-bundle exec remuda console
-bundle exec remuda console ./ops
+remuda console
+remuda console ./ops
 ```
 
 Top-level constants: `WorkflowRun`, `WorkflowStep`, `Schedule`.
@@ -186,10 +188,10 @@ run is in progress (`Current.run`).
 ## Schedule a workflow
 
 ```bash
-bundle exec remuda schedule hello --cron "0 7 * * *"
-bundle exec remuda schedule ./ops hello --cron "10 */6 * * *" --timezone America/Los_Angeles
-bundle exec remuda schedules
-bundle exec remuda unschedule hello
+remuda schedule hello --cron "0 7 * * *"
+remuda schedule ./ops hello --cron "10 */6 * * *" --timezone America/Los_Angeles
+remuda schedules
+remuda unschedule hello
 ```
 
 That inserts (or replaces) a `schedules` row in the agent's SQLite. One row per
@@ -197,7 +199,7 @@ workflow name. `--timezone` defaults to UTC. The command prints the row and a
 copy-pasteable crontab line that runs Remuda tick (not `.agentworks/bin/tick`):
 
 ```cron
-* * * * * cd /path/to/ops && bundle exec remuda tick >> /path/to/ops/.remuda/tick.log 2>&1
+* * * * * cd /path/to/ops && remuda tick >> /path/to/ops/.remuda/tick.log 2>&1
 ```
 
 No daemon. Install that one line on the host crontab. Tick fires unpaused rows
@@ -206,8 +208,8 @@ then advances `last_occurrence` / `next_occurrence`. If that workflow still has
 a `running` row, the new run is `skipped`.
 
 ```bash
-bundle exec remuda tick           # inside the agent
-bundle exec remuda tick ./ops
+remuda tick           # inside the agent
+remuda tick ./ops
 ```
 
 ## Interactive Pi (sandboxed)
@@ -215,7 +217,7 @@ bundle exec remuda tick ./ops
 From **inside** an agent directory, no subcommand:
 
 ```bash
-bundle exec remuda
+remuda
 ```
 
 That is `docker run --rm -it` of `remuda-pi:latest`. Same sandbox

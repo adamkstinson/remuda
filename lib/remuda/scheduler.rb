@@ -24,7 +24,7 @@ module Remuda
     def self.crontab_line(agent_dir)
       dir = File.expand_path(agent_dir)
       log = File.join(dir, ".remuda", "tick.log")
-      "* * * * * cd #{Shellwords.escape(dir)} && bundle exec remuda tick >> #{Shellwords.escape(log)} 2>&1"
+      "* * * * * cd #{Shellwords.escape(dir)} && remuda tick >> #{Shellwords.escape(log)} 2>&1"
     end
 
     def initialize(agent_dir)

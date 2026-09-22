@@ -21,10 +21,10 @@ not done.
    and it is Remuda, not Agentworks:
 
    ```
-   * * * * * cd <path> && bundle exec remuda tick >> <path>/.remuda/tick.log 2>&1
+   * * * * * cd <path> && remuda tick >> <path>/.remuda/tick.log 2>&1
    ```
 
-   (A `.remuda/bin/tick` binstub that execs the same is equivalent.) There is
+   There is
    **no** `.agentworks/bin/tick` line for that path.
 3. **Schedule.** `.remuda/db/remuda.sqlite3` has a `schedules` row for each
    live cadence (workflow, cron, timezone, paused, next_occurrence).
@@ -109,7 +109,7 @@ engagement agents, CUBL, nested Harbor Point helpers) are not fleet. Ignore.
 
 ## Gaps vs remuda 0.1.0
 
-Shipped today (`bundle exec remuda help`): `new`, `run`, `tick`, `tools`,
+Shipped today (`remuda help`): `new`, `run`, `tick`, `tools`,
 `version`. Also present but not in help: `console`, bare `remuda` (sandbox
 Pi). `tick` fires due `schedules` rows through the same Runner as `run`.
 `Remuda.tool` already sends `mcp.json` `headers` with `{{VAR}}` filled from
@@ -214,16 +214,15 @@ ssh adam-server 'crontab -l | grep <path>'
 
 ssh adam-server 'test -f <path>/AGENTS.md && ls <path>/.remuda/workflows'
 
-ssh adam-server 'cd <path> && bundle exec remuda tick'
+ssh adam-server 'cd <path> && remuda tick'
 # then:
-ssh adam-server 'cd <path> && bundle exec remuda console'
+ssh adam-server 'cd <path> && remuda console'
 # WorkflowRun.order(:id).last → trigger schedule, status ok
 ```
 
 ## Open (do not block remu)
 
-- Exact crontab wrapper (`bundle exec remuda tick` vs binstub) — pick one
-  when implementing tick-from-cron; both satisfy “on Remuda.”
+- Crontab wrapper is `remuda tick` (Adam, 2026-09-22). Not `bundle exec`.
 - Whether `remuda schedule --install-cron` writes crontab or prints it.
   Print is enough for adam-server (operator/agent with host crontab access).
 - Channel process model (one supervisor vs per-transport) — settle in 06
