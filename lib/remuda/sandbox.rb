@@ -48,10 +48,6 @@ module Remuda
         "--no-session",
         "@/run/remuda/prompt.txt"
       ]
-      provider = PiAuth.provider(agent_dir)
-      model = PiAuth.model(agent_dir)
-      cmd.push("--provider", provider) if provider
-      cmd.push("--model", model) if model
       {
         "Image" => Image.tag,
         "Entrypoint" => ["pi"],
