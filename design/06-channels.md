@@ -22,9 +22,10 @@ Transports in the gem, bindings in the agent.
   stdlib RFC 6455 client (`channels/websocket.rb`), so the gem takes no new
   dependency. Outbound over REST (`POST /api/v4/posts`). jid is
   `mattermost:<channel_id>`; thread_id is the root post id. A post counts as
-  inbound when it is a DM, an @mention of the bot, or (with `follow_threads`)
-  a reply in a thread the bot follows. The bot's own posts, system posts, and
-  other bots' posts are dropped (`ignore_bots`: no bot-to-bot loops).
+  inbound when it is a DM or @mentions the bot. Being part of a thread is not
+  enough: a reply must tag the bot too (Adam, 2026-09-23). The bot's own
+  posts, system posts, and other bots' posts are dropped (`ignore_bots`: no
+  bot-to-bot loops).
   `allow:` limits senders. Handlers run on one worker thread, in order, so a
   minutes-long `Remuda.agent` never stalls pongs. Reconnect with backoff,
   then backfill posts since the cursor. Dedup is by post id.

@@ -87,15 +87,13 @@ class MattermostChannelTest < Minitest::Test
     assert_equal ["p2"], drain.map(&:thread_id)
   end
 
-  def test_thread_replies_follow_and_keep_the_root
+  # Break this catches: the bot answering every reply in a thread it joined.
+  def test_thread_replies_need_a_tag_and_keep_the_root
     ch = channel
     ch.handle_event(Posted.(id: "r1", message: "and then?", root_id: "root", followers: ["bot-id"]))
-    ch.handle_event(Posted.(id: "r2", message: "unrelated", root_id: "other", followers: ["u-x"]))
-    assert_equal [["and then?", "root"]], drain.map { |m| [m.text, m.thread_id] }
-
-    quiet = channel(follow_threads: false)
-    quiet.handle_event(Posted.(id: "r3", message: "and then?", root_id: "root", followers: ["bot-id"]))
-    assert_empty drain
+    ch.handle_event(Posted.(id: "r2", message: "@ops and then?", root_id: "root", followers: ["bot-id"]))
+    ch.handle_event(Posted.(id: "r3", message: "go", root_id: "root", mentions: ["bot-id"]))
+    assert_equal [["@ops and then?", "root"], ["go", "root"]], drain.map { |m| [m.text, m.thread_id] }
   end
 
   def test_mentions_only_false_takes_everything_and_duplicates_once

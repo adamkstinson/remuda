@@ -177,8 +177,7 @@ transports:
   mattermost:
     url: https://chat.darkhorse.so
     token_env: MATTERMOST_TOKEN   # the bot's personal access token, in .env
-    # mentions_only: true         # DMs, @mentions, replies in followed threads
-    # follow_threads: true
+    # mentions_only: true         # DMs and posts that tag @bot (threads too)
     # ignore_bots: true           # never answer another bot
     # allow: [adam]               # only these usernames reach the agent
 ```
