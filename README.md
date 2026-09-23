@@ -165,6 +165,57 @@ ANTHROPIC_API_KEY=sk-ant-...
 Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens (e.g.
 planet-mcp) may live there; the file is never mounted into the sandbox.
 
+## Channels
+
+How a person reaches an agent, and how the agent answers. Transports live in
+the gem, bindings in the agent's `.remuda/channels.yml`, tokens in its `.env`.
+Mattermost is the transport today.
+
+```yaml
+# .remuda/channels.yml
+transports:
+  mattermost:
+    url: https://chat.example.com
+    token_env: MATTERMOST_TOKEN   # the bot's personal access token, in .env
+    # mentions_only: true         # DMs, @mentions, replies in followed threads
+    # follow_threads: true
+    # ignore_bots: true           # never answer another bot
+    # allow: [adam]               # only these usernames reach the agent
+```
+
+`Remuda.channels` builds the registry from that file. An agent with no
+bindings gets an empty registry, and every call on it is a no-op.
+
+```ruby
+channels = Remuda.channels
+channels.on_message do |msg|
+  result = Remuda.agent("Reply to #{msg.sender_name}: #{msg.text}")
+  channels.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id)
+end
+channels.start_all
+sleep
+```
+
+A message carries `jid` (where to reply: `mattermost:<channel_id>`),
+`thread_id` (the root post; reply with it to stay in the thread),
+`sender_name`, and `text`. Inbound arrives over the Mattermost websocket and
+goes to `on_message` on one worker thread, in order, so a long agent run
+does not stall the socket. The adapter reconnects with backoff. After a
+reconnect it backfills posts it missed, so a dropped connection does not
+drop a message.
+
+Outbound-only (a workflow posting a digest):
+
+```ruby
+mm = Remuda.channels[:mattermost]
+mm.send_message(jid: mm.dm_jid("adam"), text: "Nightly run finished.")
+mm.send_message(jid: mm.channel_jid(team: "dark-horse", channel: "ops"), text: "…")
+```
+
+Not shipped yet: a `remuda` command that supervises channels, and durable
+channel state (the cursor is in memory; pass `since:` to resume). See
+[design/06-channels.md](design/06-channels.md).
+
 ## Console
 
 IRB on this agent's SQLite — not Pi.
@@ -253,7 +304,7 @@ writes to the agent’s `.pi/agent/` on the host and survives the container.
 | `remuda version` | Gem version |
 | `remuda help` | Subcommands (`console` and bare `remuda` are omitted from help) |
 
-Not shipped: channels. There is no `remuda generate` — add workflow scripts and skills as ordinary files.
+Not shipped: a channels command (the library is above). There is no `remuda generate` — add workflow scripts and skills as ordinary files.
 
 ## Boundaries
 

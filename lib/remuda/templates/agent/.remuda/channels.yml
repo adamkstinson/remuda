@@ -1,2 +1,11 @@
 # Channel bindings for this agent. Adapters live in the gem; tokens in .env.
 # transports: {}
+#
+# transports:
+#   mattermost:
+#     url: https://chat.example.com
+#     token_env: MATTERMOST_TOKEN   # the bot's personal access token, in .env
+#     mentions_only: true           # DMs, @mentions, replies in followed threads
+#     follow_threads: true
+#     ignore_bots: true             # never answer another bot (no loops)
+#     # allow: [adam]               # only these usernames reach the agent
