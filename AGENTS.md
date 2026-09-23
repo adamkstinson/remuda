@@ -26,7 +26,7 @@ The workflow merges after Adam approves and checks are green.
 - End every comment and pull request body you write with `<!-- coding-agent -->`. The workflow uses it to tell your writing from Adam’s.
 - You work alone in the session. Where a skill says to ask your human partner, comment on the pull request (or on the issue, before a pull request exists) and stop.
 - When only Adam can unblock you (access, a decision, a secret), comment what you need and stop. If you already asked and nothing has changed, comment `Parked: <reason>` once and stop. The workflow skips the issue until Adam replies.
-- Your scope is this repository and the issue in front of you. CI, branch protection, and secrets change only when the issue asks for it.
+- Your scope is this repository and the issue in front of you. CI, branch protection, secrets, and `.remuda/` (the workflow that runs you) change only when the issue asks for it.
 - A defect you find outside the issue becomes a new issue, without the `agent` label.
 - Write commit messages and pull request titles in the style of `git log --oneline -20`.
 
