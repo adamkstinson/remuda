@@ -13,9 +13,9 @@ module Remuda
     # Addressing: jid is "mattermost:<channel_id>"; thread_id is the root post
     # id. Replying with thread_id keeps the answer in the thread.
     #
-    # What counts as inbound (mentions_only: true, the default): any direct
-    # message, an @mention of the bot anywhere, and, with follow_threads, a
-    # reply in a thread the bot follows. The bot's own posts, system posts, and
+    # What counts as inbound (mentions_only: true, the default): a direct
+    # message, or a post that @mentions the bot. A reply in a thread the bot
+    # is part of still has to tag it. The bot's own posts, system posts, and
     # posts from other bots (ignore_bots) never count. allow: limits senders to
     # a list of usernames.
     #
@@ -41,7 +41,6 @@ module Remuda
           url: url,
           token: token,
           mentions_only: config.fetch("mentions_only", true),
-          follow_threads: config.fetch("follow_threads", true),
           ignore_bots: config.fetch("ignore_bots", true),
           allow: config["allow"]
         )
@@ -49,14 +48,13 @@ module Remuda
 
       attr_reader :cursor
 
-      def initialize(url:, token:, mentions_only: true, follow_threads: true, ignore_bots: true,
+      def initialize(url:, token:, mentions_only: true, ignore_bots: true,
                      allow: nil, since: nil, reconnect_delay: 5, max_reconnect_delay: 60,
                      ping_interval: 30, logger: $stderr)
         super()
         @base = url.to_s.chomp("/")
         @token = token
         @mentions_only = mentions_only
-        @follow_threads = follow_threads
         @ignore_bots = ignore_bots
         @allow = allow && Array(allow).map { |name| name.to_s.delete_prefix("@") }
         @cursor = since
@@ -152,8 +150,7 @@ module Remuda
           post,
           channel_type: data["channel_type"],
           sender: data["sender_name"],
-          mentions: Array(parse_json(data["mentions"])),
-          followers: Array(parse_json(data["followers"]))
+          mentions: Array(parse_json(data["mentions"]))
         )
       end
 
@@ -240,11 +237,11 @@ module Remuda
         posts.compact.sort_by { |post, _| post["create_at"].to_i }.each do |post, type|
           next if post["create_at"].to_i < since || post["delete_at"].to_i.positive?
 
-          consider(post, channel_type: type, sender: username_for(post["user_id"]), mentions: [], followers: [])
+          consider(post, channel_type: type, sender: username_for(post["user_id"]), mentions: [])
         end
       end
 
-      def consider(post, channel_type:, sender:, mentions:, followers:)
+      def consider(post, channel_type:, sender:, mentions:)
         id = post["id"]
         return if id.nil? || !remember(id)
 
@@ -258,7 +255,7 @@ module Remuda
 
         sender = sender.to_s.delete_prefix("@")
         return if @allow && !@allow.include?(sender)
-        return unless addressed?(post, channel_type, mentions, followers, text)
+        return unless addressed?(channel_type, mentions, text)
 
         root = post["root_id"].to_s.empty? ? id : post["root_id"]
         deliver(IncomingMessage.new(
@@ -273,13 +270,13 @@ module Remuda
         log("dropped post #{post["id"]}: #{e.class}: #{e.message}")
       end
 
-      def addressed?(post, channel_type, mentions, followers, text)
+      # Being in a thread is not being addressed: replies must tag the bot too.
+      def addressed?(channel_type, mentions, text)
         return true unless @mentions_only
         return true if channel_type == "D"
         return true if mentions.include?(me["id"])
-        return true if text.match?(/(?<![\w@])@#{Regexp.escape(me["username"].to_s)}(?![\w-])/i)
 
-        @follow_threads && !post["root_id"].to_s.empty? && followers.include?(me["id"])
+        text.match?(/(?<![\w@])@#{Regexp.escape(me["username"].to_s)}(?![\w-])/i)
       end
 
       # true the first time a post id is seen.
