@@ -79,6 +79,13 @@ class CliTest < Minitest::Test
     refute_nil row.next_occurrence
   end
 
+  def test_remuda_schedule_prints_pacific_when_zone_is_los_angeles
+    status, output = invoke("schedule", DUMMY, "hello", "--cron", "0 * * * *", "--timezone", "America/Los_Angeles")
+    assert_equal 0, status, output
+    assert_match(/next=\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} P[DS]T/, output)
+    refute_match(/\+00:00/, output)
+  end
+
   def test_remuda_schedule_rejects_invalid_cron
     status, output = invoke("schedule", DUMMY, "hello", "--cron", "not-a-cron")
     assert_equal 1, status, output
