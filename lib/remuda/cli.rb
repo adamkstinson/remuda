@@ -119,7 +119,7 @@ module Remuda
         cron: flags[:cron],
         timezone: flags[:timezone] || "UTC"
       )
-      $stdout.puts "scheduled #{row.workflow} #{row.cron} #{row.timezone} next=#{row.next_occurrence}"
+      $stdout.puts schedule_line(row, prefix: "scheduled ")
       $stdout.puts Scheduler.crontab_line(dir)
     end
 
@@ -139,8 +139,7 @@ module Remuda
         $stdout.puts "no schedules"
       else
         rows.each do |row|
-          paused = row.paused ? " paused" : ""
-          $stdout.puts "#{row.workflow} #{row.cron} #{row.timezone} next=#{row.next_occurrence}#{paused}"
+          $stdout.puts schedule_line(row, paused: row.paused)
         end
       end
       $stdout.puts Scheduler.crontab_line(dir)
@@ -163,6 +162,14 @@ module Remuda
         end
       end
       [positional, flags]
+    end
+
+    def schedule_line(row, prefix: "", paused: false)
+      zone = row.timezone
+      next_at = Clock.format(row.next_occurrence, zone)
+      last_at = row.last_occurrence ? " last=#{Clock.format(row.last_occurrence, zone)}" : ""
+      paused_label = paused ? " paused" : ""
+      "#{prefix}#{row.workflow} #{row.cron} #{zone} next=#{next_at}#{last_at}#{paused_label}"
     end
 
     def path_and_name_from(positional)
