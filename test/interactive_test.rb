@@ -56,6 +56,23 @@ class InteractiveTest < Minitest::Test
     end
   end
 
+  def test_sandbox_adds_host_docker_internal
+    spec = Remuda::Sandbox.interactive_spec(DUMMY)
+    assert_includes spec.dig("HostConfig", "ExtraHosts"), "host.docker.internal:host-gateway"
+
+    args = Remuda::Sandbox.attach_args(DUMMY)
+    assert args.each_cons(2).any? { |a, b|
+      a == "--add-host" && b == "host.docker.internal:host-gateway"
+    }, args.inspect
+
+    Dir.mktmpdir("prompt") do |dir|
+      prompt = File.join(dir, "prompt.txt")
+      File.write(prompt, "hi")
+      batch = Remuda::Sandbox.batch_spec(DUMMY, prompt_path: prompt)
+      assert_includes batch.dig("HostConfig", "ExtraHosts"), "host.docker.internal:host-gateway"
+    end
+  end
+
   def test_cli_bare_invokes_sandbox_attach
     source = File.read(File.join(ROOT, "lib/remuda/cli.rb"))
     assert_match(/Sandbox\.attach/, source)

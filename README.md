@@ -282,6 +282,12 @@ That is `docker run --rm -it` of `remuda-pi:latest`. Same sandbox
 
 `.env` and `.remuda/db/` are **not** mounted.
 
+The sandbox adds `host.docker.internal` → host gateway so Pi can reach
+host MCP (browser, etc.) at `http://host.docker.internal:<port>`. Put that
+host in `mcp.json`. Host-side `Remuda.tool` rewrites it to `127.0.0.1`.
+The MCP process must listen on `0.0.0.0`, not only loopback — Docker's
+host-gateway is not `127.0.0.1`.
+
 Model auth is **per agent**, same as `Remuda.agent`. The sandbox sets
 `PI_CODING_AGENT_DIR` to `/agent/.pi/agent` (the host agent’s `.pi/agent/`).
 It does **not** copy host `~/.pi/agent/auth.json`. A login inside the box

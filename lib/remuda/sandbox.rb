@@ -62,7 +62,8 @@ module Remuda
             workflows_mode: "ro"
           ),
           "CapDrop" => ["ALL"],
-          "Tmpfs" => tmpfs
+          "Tmpfs" => tmpfs,
+          "ExtraHosts" => extra_hosts
         }
       }
     end
@@ -80,7 +81,8 @@ module Remuda
         "HostConfig" => {
           "Binds" => binds(agent_dir, workflows_mode: "rw"),
           "CapDrop" => ["ALL"],
-          "Tmpfs" => tmpfs
+          "Tmpfs" => tmpfs,
+          "ExtraHosts" => extra_hosts
         }
       }
     end
@@ -98,7 +100,8 @@ module Remuda
         "--user", spec["User"],
         "--workdir", "/agent",
         "--entrypoint", "pi",
-        "--tmpfs", "/tmp:#{tmpfs_flags}"
+        "--tmpfs", "/tmp:#{tmpfs_flags}",
+        "--add-host", extra_hosts.first
       ]
       Array(spec["Env"]).each do |env|
         args << "-e" << env
@@ -124,6 +127,11 @@ module Remuda
       { "/tmp" => tmpfs_flags }
     end
     private_class_method :tmpfs
+
+    def self.extra_hosts
+      ["host.docker.internal:host-gateway"]
+    end
+    private_class_method :extra_hosts
 
     def self.tmpfs_flags
       "rw,nosuid,size=64m,uid=#{Process.uid},gid=#{Process.gid}"
