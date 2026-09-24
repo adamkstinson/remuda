@@ -2,6 +2,7 @@
 
 module Remuda
   class WorkflowStep < ActiveRecord::Base
+    include ShownInPacific
     self.table_name = "workflow_steps"
     serialize :input, coder: JsonCoder
     serialize :output, coder: JsonCoder
