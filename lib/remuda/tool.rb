@@ -83,11 +83,16 @@ module Remuda
     JSON.parse(File.read(path))
   end
 
-  def self.server_url(agent_dir, server)
-    url = mcp_config(agent_dir).dig("mcpServers", server, "url")
+  def self.mcp_url(agent_dir, server)
+    spec = mcp_config(agent_dir).dig("mcpServers", server)
+    url = Mcp.resolve_url(spec)
     raise "unknown MCP server #{server.inspect} (no url in mcp.json)" if url.nil? || url.empty?
 
     url
+  end
+
+  def self.server_url(agent_dir, server)
+    mcp_url(agent_dir, server)
   end
 
   def self.server_headers(agent_dir, spec)
