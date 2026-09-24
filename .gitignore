@@ -12,3 +12,7 @@ projects/
 
 # Isolated git worktrees
 .worktrees/
+
+# Coding agent runtime (Remuda)
+.remuda/db/
+.pi/agent/
