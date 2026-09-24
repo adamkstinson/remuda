@@ -54,7 +54,7 @@ module Remuda
         "Cmd" => cmd,
         "WorkingDir" => "/agent",
         "User" => "#{Process.uid}:#{Process.gid}",
-        "Env" => sandbox_env("AGENT_PROMPT_FILE=/run/remuda/prompt.txt"),
+        "Env" => sandbox_env(agent_dir, "AGENT_PROMPT_FILE=/run/remuda/prompt.txt"),
         "HostConfig" => {
           "Binds" => binds(
             agent_dir,
@@ -77,7 +77,7 @@ module Remuda
         "OpenStdin" => true,
         "WorkingDir" => "/agent",
         "User" => "#{Process.uid}:#{Process.gid}",
-        "Env" => sandbox_env,
+        "Env" => sandbox_env(agent_dir),
         "HostConfig" => {
           "Binds" => binds(agent_dir, workflows_mode: "rw"),
           "CapDrop" => ["ALL"],
@@ -100,9 +100,11 @@ module Remuda
         "--user", spec["User"],
         "--workdir", "/agent",
         "--entrypoint", "pi",
-        "--tmpfs", "/tmp:#{tmpfs_flags}",
-        "--add-host", extra_hosts.first
+        "--tmpfs", "/tmp:#{tmpfs_flags}"
       ]
+      extra_hosts.each do |pair|
+        args << "--add-host" << pair
+      end
       Array(spec["Env"]).each do |env|
         args << "-e" << env
       end
@@ -113,15 +115,24 @@ module Remuda
       args
     end
 
-    def self.sandbox_env(*extra)
+    def self.sandbox_env(agent_dir, *extra)
       [
         "HOME=/tmp/home",
         "PI_CODING_AGENT_DIR=/agent/.pi/agent",
         "PI_TELEMETRY=0",
+        *browser_mcp_env(agent_dir),
         *extra
       ]
     end
     private_class_method :sandbox_env
+
+    def self.browser_mcp_env(agent_dir)
+      url = Remuda.mcp_url(agent_dir, "browser")
+      url ? ["REMUDA_BROWSER_MCP_URL=#{url}"] : []
+    rescue StandardError
+      []
+    end
+    private_class_method :browser_mcp_env
 
     def self.tmpfs
       { "/tmp" => tmpfs_flags }
@@ -129,7 +140,10 @@ module Remuda
     private_class_method :tmpfs
 
     def self.extra_hosts
-      ["host.docker.internal:host-gateway"]
+      [
+        "host.docker.internal:host-gateway",
+        "#{Mcp::TAILSCALE_HOST}:#{Mcp::TAILSCALE_IP}"
+      ]
     end
     private_class_method :extra_hosts
 

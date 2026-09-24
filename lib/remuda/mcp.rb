@@ -2,10 +2,14 @@
 
 require "json"
 require "net/http"
+require "socket"
 require "uri"
 
 module Remuda
   module Mcp
+    TAILSCALE_HOST = "adam-server.ts.adamkstinson.com"
+    TAILSCALE_IP = "100.64.0.2"
+
     def self.call(url, tool_name, arguments, token: nil, headers: {})
       rpc(url, "tools/call", { name: tool_name, arguments: arguments }, token: token, headers: headers)
     end
@@ -13,6 +17,26 @@ module Remuda
     def self.list(url, token: nil, headers: {})
       result = rpc(url, "tools/list", {}, token: token, headers: headers)
       Array(result && result["tools"])
+    end
+
+    def self.local_host?
+      name = ENV["REMUDA_HOSTNAME"].to_s
+      name = Socket.gethostname if name.empty?
+      name.split(".").first == "adam-server"
+    end
+
+    def self.resolve_url(spec)
+      return spec if spec.is_a?(String) && !spec.empty?
+      return nil unless spec.is_a?(Hash)
+
+      local = spec["url"].to_s
+      remote = spec["tailscale_url"].to_s
+      chosen = if local_host?
+        local.empty? ? remote : local
+      else
+        remote.empty? ? local : remote
+      end
+      chosen.empty? ? nil : chosen
     end
 
     def self.host_url(url)

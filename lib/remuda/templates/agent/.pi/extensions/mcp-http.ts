@@ -6,6 +6,7 @@
 import { Type } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync } from "node:fs";
+import { hostname } from "node:os";
 import { dirname, resolve } from "node:path";
 
 function mcpJsonPaths(): string[] {
@@ -24,12 +25,17 @@ function mcpJsonPaths(): string[] {
 }
 
 function browserMcpUrl(): string | undefined {
+	if (process.env.REMUDA_BROWSER_MCP_URL) return process.env.REMUDA_BROWSER_MCP_URL;
+
 	for (const path of mcpJsonPaths()) {
 		try {
 			const config = JSON.parse(readFileSync(path, "utf8")) as {
-				mcpServers?: Record<string, { url?: string }>;
+				mcpServers?: Record<string, { url?: string; tailscale_url?: string }>;
 			};
-			const url = config.mcpServers?.browser?.url;
+			const spec = config.mcpServers?.browser;
+			if (!spec) continue;
+			const onServer = hostname().split(".")[0] === "adam-server";
+			const url = onServer ? spec.url || spec.tailscale_url : spec.tailscale_url || spec.url;
 			if (url) return url;
 		} catch {
 			// missing or unreadable
