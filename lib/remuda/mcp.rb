@@ -15,8 +15,12 @@ module Remuda
       Array(result && result["tools"])
     end
 
+    def self.host_url(url)
+      url.to_s.gsub("host.docker.internal", "127.0.0.1")
+    end
+
     def self.rpc(url, method, params, token: nil, headers: {})
-      uri = URI(url)
+      uri = URI(host_url(url))
       request = Net::HTTP::Post.new(uri)
       request["Content-Type"] = "application/json"
       request["Authorization"] = "Bearer #{token}" if token && !token.empty?
