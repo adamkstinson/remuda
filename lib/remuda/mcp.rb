@@ -7,9 +7,6 @@ require "uri"
 
 module Remuda
   module Mcp
-    TAILSCALE_HOST = "host.example.test"
-    TAILSCALE_IP = "127.0.0.1"
-
     def self.call(url, tool_name, arguments, token: nil, headers: {})
       rpc(url, "tools/call", { name: tool_name, arguments: arguments }, token: token, headers: headers)
     end
@@ -20,9 +17,12 @@ module Remuda
     end
 
     def self.local_host?
+      expected = ENV["REMUDA_LOCAL_HOSTNAME"].to_s
+      return false if expected.empty?
+
       name = ENV["REMUDA_HOSTNAME"].to_s
       name = Socket.gethostname if name.empty?
-      name.split(".").first == "box"
+      name.split(".").first == expected
     end
 
     def self.resolve_url(spec)

@@ -150,10 +150,12 @@ module Remuda
     private_class_method :tmpfs
 
     def self.extra_hosts
-      [
-        "host.docker.internal:host-gateway",
-        "#{Mcp::TAILSCALE_HOST}:#{Mcp::TAILSCALE_IP}"
-      ]
+      hosts = ["host.docker.internal:host-gateway"]
+      ENV["REMUDA_EXTRA_HOSTS"].to_s.split(",").each do |pair|
+        pair = pair.strip
+        hosts << pair unless pair.empty?
+      end
+      hosts
     end
     private_class_method :extra_hosts
 

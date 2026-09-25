@@ -51,6 +51,7 @@ bundle exec rake test
 ## This product
 
 - Ruby 3.2 or later. ActiveRecord on SQLite, `docker-api`, `fugit`, Minitest.
+- `design/` is the spec. Its settled decisions hold. A change that alters one updates that file in the same pull request.
 - `README.md` documents the CLI. A change to a command updates it in the same pull request.
 - `projects/` holds Plane project-agent brains on disk. It is gitignored and outside your work.
 - The version and the built `.gem` files change when the issue asks for a release.

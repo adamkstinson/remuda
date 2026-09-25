@@ -10,8 +10,9 @@ opencode.json
 # Project-agent brains live on disk, not in the product repo
 projects/
 
-# Local product notes — not the public tree
-design/
+# Local fleet notes — not the public tree
+design/fleet-inventory.md
+design/10-fleet-migration.md
 
 # Isolated git worktrees
 .worktrees/
