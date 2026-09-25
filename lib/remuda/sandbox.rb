@@ -120,20 +120,11 @@ module Remuda
         "HOME=/tmp/home",
         "PI_CODING_AGENT_DIR=/agent/.pi/agent",
         "PI_TELEMETRY=0",
-        *browser_mcp_env(agent_dir),
         *github_env(agent_dir),
         *extra
       ]
     end
     private_class_method :sandbox_env
-
-    def self.browser_mcp_env(agent_dir)
-      url = Remuda.mcp_url(agent_dir, "browser")
-      url ? ["REMUDA_BROWSER_MCP_URL=#{url}"] : []
-    rescue StandardError
-      []
-    end
-    private_class_method :browser_mcp_env
 
     def self.github_env(agent_dir)
       vars = Directory.env_vars(agent_dir)
