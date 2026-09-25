@@ -99,7 +99,8 @@ class PiAuthTest < Minitest::Test
   def with_agent
     Dir.mktmpdir("pi-auth-agent") do |dir|
       File.write(File.join(dir, "AGENTS.md"), "dummy\n")
-      File.write(File.join(dir, "Gemfile"), "gem \"remuda\"\n")
+      FileUtils.mkdir_p(File.join(dir, ".remuda"))
+      File.write(File.join(dir, ".remuda/Gemfile"), "gem \"remuda\"\n")
       FileUtils.mkdir_p(File.join(dir, ".remuda/workflows"))
       yield dir
     end

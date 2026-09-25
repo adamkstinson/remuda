@@ -32,7 +32,7 @@ bundle install
 bundle exec remuda version    # this repo is the gem, not an agent
 ```
 
-In an agent's `Gemfile` (after `remuda new`, point at the git source or a
+In an agent's `.remuda/Gemfile` (after `remuda new`, point at the git source or a
 path):
 
 ```ruby
@@ -50,7 +50,7 @@ Inside an agent directory the command is `remuda`. Not `bundle exec remuda`.
 `bundle exec` is only for working on this gem from its own clone.
 
 `PATH` on commands is an agent directory. Omit it when the current directory
-already is one (`AGENTS.md` plus a `Gemfile` that names `remuda`).
+already is one (`AGENTS.md` plus `.remuda/Gemfile` that names `remuda`).
 
 ## Scaffold an agent
 
@@ -66,18 +66,19 @@ That writes identity and slots, not engine code:
 ```
 ops/
 ├── AGENTS.md              identity
-├── Gemfile
 ├── mcp.json               MCP server URLs only (no secrets)
 ├── .env.example           copy to .env (gitignored); host-only
 ├── .pi/                   this agent's Pi config / skills
 ├── files/                 working files (agent memory)
 └── .remuda/
+    ├── Gemfile            harness pin (not the app Gemfile)
     ├── workflows/         plain Ruby scripts
+    ├── channels.yml       channel bindings
     └── db/                remuda.sqlite3 created on first run/tick/console
 ```
 
-There is no `lib/` harness copy in the agent. Edit `Gemfile` so `remuda`
-resolves (git or path), then `bundle install`.
+There is no `lib/` harness copy in the agent. Edit `.remuda/Gemfile` so `remuda`
+resolves (git or path), then `bundle install` with `BUNDLE_GEMFILE=.remuda/Gemfile`.
 
 ## Run a workflow
 

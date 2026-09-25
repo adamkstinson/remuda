@@ -2,4 +2,4 @@
 
 source "https://rubygems.org"
 
-gem "remuda", path: "../.."
+gem "remuda", path: "../../.."
