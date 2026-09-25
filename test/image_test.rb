@@ -35,6 +35,8 @@ class ImageTest < Minitest::Test
     assert_match(/\bpi\b/i, text)
     assert_match(/\bgh\b/, text)
     assert_match(/ruby:4\.0\.6/, text)
+    refute_match(%r{COPY --from=pi /usr/local/bin/pi}, text)
+    assert_match(%r{ln -sfn /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js}, text)
     refute_match(/\bclaude\b/i, text)
     assert_equal "remuda-coding:latest", Remuda::Image.coding_tag
   end
