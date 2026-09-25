@@ -11,7 +11,7 @@ Ruby.
 today's mount from, ride, and turn back. Many horses, one outfit. Many agents,
 one harness.*
 
-v1 is the CLI and workflow runner below.
+v1 is the CLI and workflow runner below. Internals live in [`design/`](design/).
 
 ## Requirements
 
@@ -110,7 +110,7 @@ Host-side MCP call. Split on the first dot: server `plane`, tool
 ```json
 {
   "mcpServers": {
-    "plane": { "url": "https://mcp.example.com/mcp" }
+    "plane": { "url": "https://mcp.example.com" }
   }
 }
 ```
@@ -165,8 +165,8 @@ PI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens (e.g.
-planet-mcp) may live there; the file is never mounted into the sandbox.
+Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens may live
+there; the file is never mounted into the sandbox.
 
 ## Channels
 
@@ -211,11 +211,12 @@ Outbound-only (a workflow posting a digest):
 ```ruby
 mm = Remuda.channels[:mattermost]
 mm.send_message(jid: mm.dm_jid("adam"), text: "Nightly run finished.")
-mm.send_message(jid: mm.channel_jid(team: "dark-horse", channel: "ops"), text: "…")
+mm.send_message(jid: mm.channel_jid(team: "team", channel: "ops"), text: "…")
 ```
 
 Not shipped yet: a `remuda` command that supervises channels, and durable
-channel state (the cursor is in memory; pass `since:` to resume).
+channel state (the cursor is in memory; pass `since:` to resume). See
+[design/06-channels.md](design/06-channels.md).
 
 ## Console
 
@@ -276,12 +277,12 @@ That is `docker run --rm -it` of the image in `.remuda/image` (default
 `remuda-pi:latest`). Same sandbox `Remuda.agent` uses. The directory you ran
 from is mounted at `/agent` read-write.
 
-The sandbox adds `host.docker.internal` → host gateway and
-`host.example.test` → `127.0.0.1` (so containers do not
-resolve `box` to themselves). `mcp.json` may list both a local
-`url` and a `tailscale_url`. On box Remuda uses `url`; everywhere
-else it uses `tailscale_url`. The sandbox gets `REMUDA_BROWSER_MCP_URL`.
-Host-side `Remuda.tool` rewrites `host.docker.internal` to `127.0.0.1`.
+The sandbox adds `host.docker.internal` → host gateway. Set
+`REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `mcp.json` may list both a
+local `url` and a `tailscale_url`. When `REMUDA_LOCAL_HOSTNAME` matches this
+machine, Remuda uses `url`; otherwise `tailscale_url`. The sandbox gets
+`REMUDA_BROWSER_MCP_URL`. Host-side `Remuda.tool` rewrites
+`host.docker.internal` to `127.0.0.1`.
 
 Model auth is **per agent**, same as `Remuda.agent`. The sandbox sets
 `PI_CODING_AGENT_DIR` to `/agent/.pi/agent` (the host agent’s `.pi/agent/`).

@@ -70,7 +70,7 @@ class ToolsCliTest < Minitest::Test
     assert_includes output, "\"text\""
   end
 
-  # Break this catches: remuda tools ignores mcp.json headers (so planet-mcp never sees X-Plane-Key).
+  # Break this catches: remuda tools ignores mcp.json headers (so the server never sees the interpolated key).
   def test_remuda_tools_sends_interpolated_mcp_headers
     File.write(ENV_FILE, "PLANE_API_KEY=from-env-key\n")
     File.write(MCP, JSON.generate(

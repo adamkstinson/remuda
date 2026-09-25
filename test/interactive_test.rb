@@ -57,14 +57,10 @@ class InteractiveTest < Minitest::Test
   def test_sandbox_adds_host_docker_internal
     spec = Remuda::Sandbox.interactive_spec(DUMMY)
     assert_includes spec.dig("HostConfig", "ExtraHosts"), "host.docker.internal:host-gateway"
-    assert_includes spec.dig("HostConfig", "ExtraHosts"), "host.example.test:127.0.0.1"
 
     args = Remuda::Sandbox.attach_args(DUMMY)
     assert args.each_cons(2).any? { |a, b|
       a == "--add-host" && b == "host.docker.internal:host-gateway"
-    }, args.inspect
-    assert args.each_cons(2).any? { |a, b|
-      a == "--add-host" && b == "host.example.test:127.0.0.1"
     }, args.inspect
 
     Dir.mktmpdir("prompt") do |dir|
