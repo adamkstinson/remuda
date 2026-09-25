@@ -132,8 +132,11 @@ remuda tools ./ops plane.list_work_items
 
 ### `Remuda.agent(prompt)`
 
-One-shot **sandboxed** Pi in the `remuda-pi` image (same image as bare
-`remuda`). Result has `output`, `ok`, `exit_code`, and related fields.
+One-shot **sandboxed** Pi. Ops/Assistant use `remuda-pi:latest` (Pi only).
+A coding agent (`.remuda/Gemfile` or `.remuda/workflows/poll-and-execute.rb`)
+uses `remuda-coding:latest` — Ruby 4.0.6, `gh`, libvips, libpq, Chromium.
+`GH_TOKEN` / `GITHUB_TOKEN` from the host `.env` is injected; `.env` is still
+not mounted. Result has `output`, `ok`, `exit_code`, and related fields.
 
 ```ruby
 # .remuda/workflows/ping.rb
