@@ -12,16 +12,11 @@ module Remuda
     end
 
     def self.agent?(dir)
-      File.file?(File.join(dir, "AGENTS.md")) && gemfile_names_remuda?(dir)
+      File.file?(gemfile(dir))
     end
 
     def self.gemfile(dir)
       File.join(File.expand_path(dir), ".remuda", "Gemfile")
-    end
-
-    def self.gemfile_names_remuda?(dir)
-      path = gemfile(dir)
-      File.file?(path) && File.read(path).match?(/\bgem\s+["']remuda["']/)
     end
 
     def self.env_vars(dir)
