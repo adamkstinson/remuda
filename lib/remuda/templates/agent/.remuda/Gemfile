@@ -1,0 +1,6 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gem "remuda", git: "https://github.com/adamkstinson/remuda.git"
+# gem "remuda", path: "../remuda"   # local checkout
