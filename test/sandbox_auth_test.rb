@@ -23,9 +23,8 @@ class SandboxAuthTest < Minitest::Test
     refute env.any? { |e| e.include?("/tmp/pi") }, env.inspect
 
     binds = spec.dig("HostConfig", "Binds") || []
-    assert binds.any? { |b| b.include?("#{DUMMY}/.pi:") && b.include?("/agent/.pi") }, binds.inspect
+    assert_includes binds, "#{DUMMY}:/agent:rw"
     refute binds.any? { |b| b.include?("/tmp/pi") }, binds.inspect
-    refute binds.any? { |b| b.include?(File.join(DUMMY, ".env")) }, binds.inspect
     host_agent = File.expand_path("~/.pi/agent")
     refute binds.any? { |b| b.start_with?("#{host_agent}:") }, binds.inspect
   end

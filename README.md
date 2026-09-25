@@ -274,17 +274,9 @@ From **inside** an agent directory, no subcommand:
 remuda
 ```
 
-That is `docker run --rm -it` of `remuda-pi:latest`. Same sandbox
-`Remuda.agent` uses. Workflow Ruby and SQLite stay on the host.
-
-| Survives on the host | Dies when the container exits |
-|---|---|
-| `AGENTS.md`, `mcp.json` | `/tmp` (tmpfs), including `HOME=/tmp/home` |
-| `.pi/` (this agent’s `auth.json`, sessions, model catalog) | the container rootfs (`--rm`) |
-| `files/` | |
-| `.remuda/workflows/` (writable in this interactive door) | |
-
-`.env` and `.remuda/db/` are **not** mounted.
+That is `docker run --rm -it` of the image in `.remuda/image` (default
+`remuda-pi:latest`). Same sandbox `Remuda.agent` uses. The directory you ran
+from is mounted at `/agent` read-write.
 
 The sandbox adds `host.docker.internal` → host gateway and
 `host.example.test` → `127.0.0.1` (so containers do not

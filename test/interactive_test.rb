@@ -15,12 +15,10 @@ class InteractiveTest < Minitest::Test
     assert_equal ["pi"], spec["Entrypoint"]
   end
 
-  def test_interactive_keeps_db_and_ruby_on_the_host
+  def test_interactive_mounts_the_whole_directory
     spec = Remuda::Sandbox.interactive_spec(DUMMY)
     binds = spec.dig("HostConfig", "Binds") || []
-    refute binds.any? { |b| b.include?(".remuda/db") }, "must not mount dummy SQLite"
-    refute binds.any? { |b| b.split(":", 2).first.end_with?("/.env") || b.include?(":/.env") },
-           "must not mount .env"
+    assert_includes binds, "#{DUMMY}:/agent:rw"
     refute binds.any? { |b| b.include?("/lib/remuda") }, "workflow Ruby stays on the host gem"
   end
 
