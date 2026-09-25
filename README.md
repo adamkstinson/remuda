@@ -50,7 +50,7 @@ Inside an agent directory the command is `remuda`. Not `bundle exec remuda`.
 `bundle exec` is only for working on this gem from its own clone.
 
 `PATH` on commands is an agent directory. Omit it when the current directory
-already is one (`AGENTS.md` plus `.remuda/Gemfile` that names `remuda`).
+already is one (`.remuda/Gemfile` is present).
 
 ## Scaffold an agent
 

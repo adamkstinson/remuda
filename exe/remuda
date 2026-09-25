@@ -1,16 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Inside an agent directory the command is `remuda`. The harness Gemfile is
-# `.remuda/Gemfile`. bundle exec is how, not what you type.
+# One way: if .remuda/Gemfile is here, that bundle is Remuda.
 if ENV["BUNDLE_BIN_PATH"].to_s.empty?
-  dir = Dir.pwd
-  gemfile = File.join(dir, ".remuda", "Gemfile")
-  if File.file?(File.join(dir, "AGENTS.md")) &&
-     File.file?(gemfile) &&
-     File.read(gemfile).match?(/\bgem\s+["']remuda["']/)
-    exec({ "BUNDLE_GEMFILE" => gemfile }, "bundle", "exec", "remuda", *ARGV)
-  end
+  gemfile = File.expand_path(".remuda/Gemfile")
+  exec({ "BUNDLE_GEMFILE" => gemfile }, "bundle", "exec", "remuda", *ARGV) if File.file?(gemfile)
 end
 
 require "remuda"
