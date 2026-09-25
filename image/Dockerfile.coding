@@ -5,10 +5,6 @@ RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1
 
 FROM ruby:4.0.6-bookworm
 
-COPY --from=pi /usr/local/bin/node /usr/local/bin/node
-COPY --from=pi /usr/local/bin/pi /usr/local/bin/pi
-COPY --from=pi /usr/local/lib/node_modules /usr/local/lib/node_modules
-
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       git \
@@ -31,6 +27,13 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy Node and the Pi package. Do not copy /usr/local/bin/pi — npm's shim
+# imports ./chunks relative to itself; flattening it into /usr/local/bin
+# breaks that.
+COPY --from=pi /usr/local/bin/node /usr/local/bin/node
+COPY --from=pi /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sfn /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js /usr/local/bin/pi
 
 WORKDIR /agent
 ENTRYPOINT ["pi"]
