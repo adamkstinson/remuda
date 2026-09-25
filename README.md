@@ -280,9 +280,8 @@ from is mounted at `/agent` read-write.
 The sandbox adds `host.docker.internal` → host gateway. Set
 `REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `mcp.json` may list both a
 local `url` and a `tailscale_url`. When `REMUDA_LOCAL_HOSTNAME` matches this
-machine, Remuda uses `url`; otherwise `tailscale_url`. The sandbox gets
-`REMUDA_BROWSER_MCP_URL`. Host-side `Remuda.tool` rewrites
-`host.docker.internal` to `127.0.0.1`.
+machine, Remuda uses `url`; otherwise `tailscale_url`. Host-side
+`Remuda.tool` rewrites `host.docker.internal` to `127.0.0.1`.
 
 Model auth is **per agent**, same as `Remuda.agent`. The sandbox sets
 `PI_CODING_AGENT_DIR` to `/agent/.pi/agent` (the host agent’s `.pi/agent/`).
