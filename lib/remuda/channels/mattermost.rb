@@ -124,7 +124,7 @@ module Remuda
       end
 
       # jid of the direct-message channel between the bot and a user, for
-      # outbound-only use ("tell Adam the run finished").
+      # outbound-only use ("tell them the run finished").
       def dm_jid(username)
         user = api(:get, "/users/username/#{URI.encode_www_form_component(username.to_s.delete_prefix("@"))}")
         channel = api(:post, "/channels/direct", [me["id"], user["id"]])
