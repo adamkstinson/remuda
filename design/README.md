@@ -17,7 +17,6 @@ an open item get recorded as ADRs in `../adr/` when we start cutting code.
 | [09-gem.md](./09-gem.md) | The gem — tree, models-in-gem, build order |
 | [fleet-inventory.md](./fleet-inventory.md) | Live Agentworks ticks on box (input to fleet & migration) |
 | [10-fleet-migration.md](./10-fleet-migration.md) | Fleet cutover order, gem gaps, leftover ticks |
-| [11-rails.md](./11-rails.md) | Rails host — `agents/` fleet, named invoke, jobs not callbacks |
 
 Identified but not yet drafted: observability & the optimize loop,
 distribution (gem vs image vs Pi pin — image is its own asset).
