@@ -16,8 +16,7 @@ class ScaffoldTest < Minitest::Test
     assert_equal "remuda", spec.name
   end
 
-  # Break this catches: dummy is not an agent (no identity file, or Gemfile
-  # does not name the remuda harness).
+  # Break this catches: dummy is missing identity or harness files.
   def test_dummy_is_an_agent_directory
     assert File.directory?(DUMMY), "expected test/dummy agent fixture"
     assert File.file?(File.join(DUMMY, "AGENTS.md")), "dummy needs AGENTS.md"

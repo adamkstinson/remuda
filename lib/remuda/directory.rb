@@ -5,14 +5,14 @@ module Remuda
     def self.find(path = nil)
       dir = File.expand_path(path || Dir.pwd)
       unless agent?(dir)
-        raise ArgumentError, "#{dir} is not a remuda agent directory"
+        raise ArgumentError, "#{dir} has no .remuda/"
       end
 
       dir
     end
 
     def self.agent?(dir)
-      File.file?(gemfile(dir))
+      File.directory?(File.join(File.expand_path(dir), ".remuda"))
     end
 
     def self.gemfile(dir)
