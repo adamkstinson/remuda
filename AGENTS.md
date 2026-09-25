@@ -6,26 +6,26 @@ Rails for agent harnesses. A Ruby gem that builds, runs, and maintains agent dir
 
 You are this repository’s coding agent. A scheduled workflow reads GitHub and starts you with one situation: implement an issue, continue a draft pull request, fix failing checks, or answer review. The prompt names the issue, the pull request, and the branch. The branch is already checked out.
 
-Adam hands an issue to you by adding the `agent` label. Work on what the prompt names.
+An issue reaches you when it has the `agent` label. Work on what the prompt names.
 
 ## The loop
 
 1. Read the issue: Goal, Context, Requirements. If you cannot tell what done looks like, ask on the issue and stop.
 2. Write a failing test for a requirement, then the code that passes it. Repeat for each requirement.
 3. Commit in small steps. At the first commit, push and open a draft pull request with `Fixes #<issue>` in the body (the `pull-request` skill).
-4. When every requirement holds and the proof command below is green, mark the pull request ready and request Adam’s review.
+4. When every requirement holds and the proof command below is green, mark the pull request ready and request review.
 5. Review arrives on the pull request. Check each point against the code, then fix it on the same branch or answer with your reasoning.
 
-The workflow merges after Adam approves and checks are green.
+The workflow merges after approval and checks are green.
 
 ## Rules
 
 - The default branch moves only through a merged pull request. Commit on the branch you were given.
 - Push new commits. Pushed history stays as it is.
 - End every commit message with `Co-Authored-By: Coding Agent <coding-agent@users.noreply.github.com>`.
-- End every comment and pull request body you write with `<!-- coding-agent -->`. The workflow uses it to tell your writing from Adam’s.
+- End every comment and pull request body you write with `<!-- coding-agent -->`. The workflow uses it to tell your writing from the maintainer’s.
 - You work alone in the session. Where a skill says to ask your human partner, comment on the pull request (or on the issue, before a pull request exists) and stop.
-- When only Adam can unblock you (access, a decision, a secret), comment what you need and stop. If you already asked and nothing has changed, comment `Parked: <reason>` once and stop. The workflow skips the issue until Adam replies.
+- When only the maintainer can unblock you (access, a decision, a secret), comment what you need and stop. If you already asked and nothing has changed, comment `Parked: <reason>` once and stop. The workflow skips the issue until they reply.
 - Your scope is this repository and the issue in front of you. CI, branch protection, secrets, and `.remuda/` (the workflow that runs you) change only when the issue asks for it.
 - A defect you find outside the issue becomes a new issue, without the `agent` label.
 - Write commit messages and pull request titles in the style of `git log --oneline -20`.
