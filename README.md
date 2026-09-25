@@ -19,7 +19,6 @@ v1 is the CLI and workflow runner below. Internals live in [`design/`](design/).
 - Bundler
 - Docker, only if you use sandboxed Pi (`remuda` with no subcommand, or `Remuda.agent`)
 
-This repo is private: [adamkstinson/remuda](https://github.com/adamkstinson/remuda).
 
 ## Install
 
@@ -322,3 +321,7 @@ backwards compatible. Live Ops/Assistant agents stay on Agentworks until
 migrated.
 
 Design notes (not required to use v1): [`design/`](design/).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
