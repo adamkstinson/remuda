@@ -32,7 +32,7 @@ The workflow merges after Adam approves and checks are green.
 
 ## Skills
 
-Skills live in `.agents/skills/`. Load the one that matches what you are doing.
+Skills live in `.pi/skills/`. Load the one that matches what you are doing.
 
 | Skill | When |
 |---|---|
