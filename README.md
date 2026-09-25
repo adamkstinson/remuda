@@ -11,7 +11,7 @@ Ruby.
 today's mount from, ride, and turn back. Many horses, one outfit. Many agents,
 one harness.*
 
-v1 is the CLI and workflow runner below. Internals live in [`design/`](design/).
+v1 is the CLI and workflow runner below.
 
 ## Requirements
 
@@ -215,8 +215,7 @@ mm.send_message(jid: mm.channel_jid(team: "dark-horse", channel: "ops"), text: "
 ```
 
 Not shipped yet: a `remuda` command that supervises channels, and durable
-channel state (the cursor is in memory; pass `since:` to resume). See
-[design/06-channels.md](design/06-channels.md).
+channel state (the cursor is in memory; pass `since:` to resume).
 
 ## Console
 
@@ -319,8 +318,6 @@ Successor to Agentworks. That project proved the engine and then stenciled it
 into every agent. Remuda keeps the ideas, not the stencil, and is not
 backwards compatible. Live Ops/Assistant agents stay on Agentworks until
 migrated.
-
-Design notes (not required to use v1): [`design/`](design/).
 
 ## License
 
