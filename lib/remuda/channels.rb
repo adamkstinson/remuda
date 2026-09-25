@@ -4,7 +4,7 @@ require "yaml"
 
 module Remuda
   # Transports live in the gem; bindings live in the agent
-  # (.remuda/channels.yml), tokens in the agent's .env. See design/06-channels.md.
+  # (.remuda/channels.yml), tokens in the agent's .env.
   #
   # A channel responds to:
   #   name            -> String   transport identifier ("mattermost")
