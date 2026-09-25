@@ -136,8 +136,6 @@ module Remuda
     private_class_method :browser_mcp_env
 
     def self.github_env(agent_dir)
-      return [] unless Image.coding?(agent_dir)
-
       vars = Directory.env_vars(agent_dir)
       token = vars["GH_TOKEN"] || vars["GITHUB_TOKEN"]
       return [] if token.nil? || token.empty?
