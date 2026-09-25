@@ -34,7 +34,7 @@ module Remuda
           usage: nil,
           ok: status.zero?,
           exit_code: status,
-          image: Image.tag
+          image: Image.for(agent_dir)
         )
       end
     end
@@ -49,7 +49,7 @@ module Remuda
         "@/run/remuda/prompt.txt"
       ]
       {
-        "Image" => Image.tag,
+        "Image" => Image.for(agent_dir),
         "Entrypoint" => ["pi"],
         "Cmd" => cmd,
         "WorkingDir" => "/agent",
@@ -71,7 +71,7 @@ module Remuda
     def self.interactive_spec(agent_dir)
       agent_dir = File.expand_path(agent_dir)
       {
-        "Image" => Image.tag,
+        "Image" => Image.for(agent_dir),
         "Entrypoint" => ["pi"],
         "Tty" => true,
         "OpenStdin" => true,
@@ -121,6 +121,7 @@ module Remuda
         "PI_CODING_AGENT_DIR=/agent/.pi/agent",
         "PI_TELEMETRY=0",
         *browser_mcp_env(agent_dir),
+        *github_env(agent_dir),
         *extra
       ]
     end
@@ -133,6 +134,17 @@ module Remuda
       []
     end
     private_class_method :browser_mcp_env
+
+    def self.github_env(agent_dir)
+      return [] unless Image.coding?(agent_dir)
+
+      vars = Directory.env_vars(agent_dir)
+      token = vars["GH_TOKEN"] || vars["GITHUB_TOKEN"]
+      return [] if token.nil? || token.empty?
+
+      ["GH_TOKEN=#{token}", "GITHUB_TOKEN=#{token}"]
+    end
+    private_class_method :github_env
 
     def self.tmpfs
       { "/tmp" => tmpfs_flags }

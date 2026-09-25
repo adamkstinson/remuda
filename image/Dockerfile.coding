@@ -1,0 +1,36 @@
+# remuda-coding — Pi plus the Rails/GitHub toolchain.
+# Tag: remuda-coding:latest
+FROM node:22-bookworm-slim AS pi
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1
+
+FROM ruby:4.0.6-bookworm
+
+COPY --from=pi /usr/local/bin/node /usr/local/bin/node
+COPY --from=pi /usr/local/bin/pi /usr/local/bin/pi
+COPY --from=pi /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      git \
+      ripgrep \
+      ca-certificates \
+      curl \
+      gnupg \
+      build-essential \
+      libsqlite3-dev \
+      sqlite3 \
+      libvips \
+      libpq-dev \
+      postgresql-client \
+      chromium \
+      chromium-driver \
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /agent
+ENTRYPOINT ["pi"]
