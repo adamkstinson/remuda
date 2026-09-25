@@ -13,14 +13,12 @@ module Remuda
       CODING
     end
 
-    def self.coding?(agent_dir)
-      root = File.expand_path(agent_dir)
-      File.file?(File.join(root, ".remuda/Gemfile")) ||
-        File.file?(File.join(root, ".remuda/workflows/poll-and-execute.rb"))
-    end
-
     def self.for(agent_dir)
-      coding?(agent_dir) ? coding_tag : tag
+      path = File.join(File.expand_path(agent_dir), ".remuda", "image")
+      return tag unless File.file?(path)
+
+      line = File.read(path).strip
+      line.empty? ? tag : line
     end
   end
 end

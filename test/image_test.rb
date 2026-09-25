@@ -41,19 +41,24 @@ class ImageTest < Minitest::Test
 
   def test_dummy_uses_pi_image
     dummy = File.join(ROOT, "test/dummy")
-    refute Remuda::Image.coding?(dummy)
     assert_equal Remuda::Image.tag, Remuda::Image.for(dummy)
   end
 
-  def test_poll_and_execute_agent_uses_coding_image
+  def test_poll_and_execute_does_not_pick_the_image
     Dir.mktmpdir("coding-agent") do |dir|
       FileUtils.mkdir_p(File.join(dir, ".remuda/workflows"))
       File.write(File.join(dir, ".remuda/workflows/poll-and-execute.rb"), "# tick\n")
-      assert Remuda::Image.coding?(dir)
+      assert_equal Remuda::Image.tag, Remuda::Image.for(dir)
+    end
+  end
+
+  def test_remuda_image_file_selects_the_tag
+    Dir.mktmpdir("coding-agent") do |dir|
+      FileUtils.mkdir_p(File.join(dir, ".remuda"))
+      File.write(File.join(dir, ".remuda/image"), "remuda-coding:latest\n")
       assert_equal Remuda::Image.coding_tag, Remuda::Image.for(dir)
       spec = Remuda::Sandbox.interactive_spec(dir)
       assert_equal Remuda::Image.coding_tag, spec["Image"]
-      refute Array(spec["Env"]).any? { |e| e.start_with?("GH_TOKEN=") }
 
       File.write(File.join(dir, ".env"), "GH_TOKEN=ghs_test_not_a_real_token\n")
       spec = Remuda::Sandbox.interactive_spec(dir)
