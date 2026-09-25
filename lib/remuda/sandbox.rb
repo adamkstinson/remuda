@@ -169,30 +169,12 @@ module Remuda
     end
     private_class_method :ensure_pi_agent_dir
 
-    def self.binds(agent_dir, prompt_path: nil, workflows_mode: "ro")
-      mounts = []
+    def self.binds(agent_dir, prompt_path: nil, workflows_mode: "rw")
+      mounts = ["#{File.expand_path(agent_dir)}:/agent:rw"]
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
-      %w[AGENTS.md mcp.json].each do |name|
-        host = File.join(agent_dir, name)
-        mounts << "#{host}:/agent/#{name}:ro" if File.file?(host)
-      end
-      %w[.pi files].each do |name|
-        host = File.join(agent_dir, name)
-        mounts << "#{host}:/agent/#{name}:rw" if File.directory?(host)
-      end
-      workflows = File.join(agent_dir, ".remuda", "workflows")
-      if File.directory?(workflows)
-        mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}"
-      end
-      mounts.reject { |bind| env_bind?(bind) }
+      mounts
     end
     private_class_method :binds
-
-    def self.env_bind?(bind)
-      host = bind.split(":", 2).first.to_s
-      File.basename(host) == ".env"
-    end
-    private_class_method :env_bind?
 
     def self.decode_logs(raw)
       raw = raw.to_s
