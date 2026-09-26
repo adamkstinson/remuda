@@ -11,10 +11,14 @@ module Remuda
   #   owns_jid?(jid)  -> bool     does this channel manage this address?
   #   start!          -> nil      begin receiving; inbound goes to on_message
   #   stop!           -> nil      graceful shutdown
-  #   send_message(jid:, text:, thread_id: nil) -> String | nil
-  #     Deliver text. Returns the thread it landed in, nil if undeliverable.
-  #     Without thread_id it starts a new thread and returns that thread's root.
+  #   send_message(jid:, text:, thread_id: nil, files: nil) -> String | nil
+  #     Deliver text and optional local file paths. Returns the thread it
+  #     landed in, nil if undeliverable. Without thread_id it starts a new
+  #     thread and returns that thread's root.
   module Channels
+    # A file that arrived with an inbound message, already on disk.
+    Attachment = Data.define(:id, :name, :mime_type, :size, :path)
+
     # A normalized inbound message; everything transport-specific is gone.
     IncomingMessage = Data.define(
       :jid,           # opaque per-channel address; pass back to send_message
@@ -22,8 +26,13 @@ module Remuda
       :text,
       :sender_name,
       :thread_id,     # conversation unit: reply here to stay in-thread
-      :bot_token_key  # which bot identity received it, or nil
-    )
+      :bot_token_key, # which bot identity received it, or nil
+      :files          # Attachment list; empty when the post has no files
+    ) do
+      def initialize(jid:, channel:, text:, sender_name:, thread_id:, bot_token_key: nil, files: [])
+        super(jid:, channel:, text:, sender_name:, thread_id:, bot_token_key:, files: Array(files))
+      end
+    end
 
     class Channel
       def initialize
@@ -77,8 +86,8 @@ module Remuda
         @channels.each_value.find { |channel| channel.owns_jid?(jid) }
       end
 
-      def send_message(jid:, text:, thread_id: nil)
-        for_jid(jid)&.send_message(jid: jid, text: text, thread_id: thread_id)
+      def send_message(jid:, text:, thread_id: nil, files: nil)
+        for_jid(jid)&.send_message(jid: jid, text: text, thread_id: thread_id, files: files)
       end
 
       # Route every bound channel's inbound to one handler.
