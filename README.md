@@ -191,8 +191,18 @@ bindings gets an empty registry, and every call on it is a no-op.
 ```ruby
 channels = Remuda.channels
 channels.on_message do |msg|
-  result = Remuda.agent("Reply to #{msg.sender_name}: #{msg.text}")
-  channels.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id)
+  listed = msg.files.filter_map do |file|
+    next unless file.path
+    dest = File.join("files", file.name)
+    FileUtils.mkdir_p("files")
+    FileUtils.cp(file.path, dest)
+    dest
+  end
+  prompt = msg.text.to_s
+  prompt += "\n\nAttached files:\n" + listed.map { |p| "- #{p}" }.join("\n") if listed.any?
+  result = Remuda.agent("Reply to #{msg.sender_name}: #{prompt}")
+  outbound = Dir.glob("files/outbound/*")
+  channels.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id, files: outbound)
 end
 channels.start_all
 sleep
@@ -200,7 +210,8 @@ sleep
 
 A message carries `jid` (where to reply: `mattermost:<channel_id>`),
 `thread_id` (the root post; reply with it to stay in the thread),
-`sender_name`, and `text`. Inbound arrives over the Mattermost websocket and
+`sender_name`, `text`, and `files` (attachments already downloaded to disk).
+`send_message(..., files: ["photo.jpg"])` uploads those paths. Inbound arrives over the Mattermost websocket and
 goes to `on_message` on one worker thread, in order, so a long agent run
 does not stall the socket. While that handler runs, the bot shows as typing
 in the channel and the thread. The adapter reconnects with backoff. After a
