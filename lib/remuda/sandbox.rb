@@ -171,19 +171,21 @@ module Remuda
     private_class_method :binds
 
     def self.decode_logs(raw)
-      raw = raw.to_s
-      return raw if raw.empty?
-      return raw unless raw.bytesize >= 8 && raw.bytes[0].to_i <= 2
+      raw = raw.to_s.b
+      return raw.force_encoding("UTF-8") if raw.empty?
+      return raw.force_encoding("UTF-8") unless raw.bytesize >= 8 && raw.getbyte(0).to_i <= 2
 
-      out = +""
+      out = +"".b
       offset = 0
-      bytes = raw.b
-      while offset + 8 <= bytes.bytesize
-        size = bytes[offset + 4, 4].unpack1("N")
-        out << bytes[offset + 8, size].to_s
+      while offset + 8 <= raw.bytesize
+        size = raw[offset + 4, 4].unpack1("N")
+        break if size.nil? || offset + 8 + size > raw.bytesize
+
+        out << raw[offset + 8, size]
         offset += 8 + size
       end
-      out.encode("UTF-8", invalid: :replace, undef: :replace)
+      out.force_encoding("UTF-8")
+      out.valid_encoding? ? out : out.encode("UTF-8", invalid: :replace, undef: :replace)
     end
     private_class_method :decode_logs
   end
