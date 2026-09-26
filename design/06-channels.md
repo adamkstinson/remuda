@@ -26,7 +26,9 @@ Transports in the gem, bindings in the agent.
   posts, system posts, and other bots' posts are dropped (`ignore_bots`: no
   bot-to-bot loops).
   `allow:` limits senders. Handlers run on one worker thread, in order, so a
-  minutes-long `Remuda.agent` never stalls pongs. Reconnect with backoff,
+  minutes-long `Remuda.agent` never stalls pongs. While a handler runs, the
+  bot pulses typing on the channel and the thread so the person sees it
+  working (`POST /users/me/typing`). Reconnect with backoff,
   then backfill posts since the cursor. Dedup is by post id.
 - **Channel state is rows** (`channel_cursors`, `channel_sessions`,
   `channel_messages` — see [05-state](./05-state.md)), not JSON files.
