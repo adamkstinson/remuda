@@ -1,8 +1,11 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require "json"
 require "net/http"
+require "securerandom"
 require "set"
+require "tmpdir"
 require "uri"
 
 module Remuda
@@ -14,10 +17,12 @@ module Remuda
     # id. Replying with thread_id keeps the answer in the thread.
     #
     # What counts as inbound (mentions_only: true, the default): a direct
-    # message, or a post that @mentions the bot. A reply in a thread the bot
-    # is part of still has to tag it. The bot's own posts, system posts, and
-    # posts from other bots (ignore_bots) never count. allow: limits senders to
-    # a list of usernames.
+    # message, or a post that @mentions the bot. A file-only post counts if it
+    # would otherwise. A reply in a thread the bot is part of still has to tag
+    # it. The bot's own posts, system posts, and posts from other bots
+    # (ignore_bots) never count. allow: limits senders to a list of usernames.
+    # Inbound files are downloaded to a temp dir on IncomingMessage.files;
+    # send_message files: uploads local paths onto the post.
     #
     # Reconnects with backoff. After a reconnect it backfills posts created
     # since the last one seen, so a dropped socket does not drop a message.
@@ -69,6 +74,7 @@ module Remuda
         @usernames = {}
         @lock = Mutex.new
         @running = false
+        @files_dir = File.join(Dir.tmpdir, "remuda-mattermost-#{Process.pid}")
       end
 
       def name
@@ -112,12 +118,14 @@ module Remuda
         @running
       end
 
-      def send_message(jid:, text:, thread_id: nil)
+      def send_message(jid:, text:, thread_id: nil, files: nil)
         channel_id = channel_id_for(jid)
         return nil unless channel_id
 
+        file_ids = upload_files(channel_id, Array(files))
         body = { channel_id: channel_id, message: text.to_s }
         body[:root_id] = thread_id.to_s unless thread_id.to_s.empty?
+        body[:file_ids] = file_ids unless file_ids.empty?
         post = api(:post, "/posts", body)
         remember(post["id"])
         thread_id.to_s.empty? ? post["id"] : thread_id.to_s
@@ -160,7 +168,11 @@ module Remuda
       private
 
       def deliver(message)
-        @queue ? @queue << message : super
+        if @queue
+          @queue << message
+        else
+          super(hydrate_files(message))
+        end
       rescue ClosedQueueError
         nil
       end
@@ -168,6 +180,7 @@ module Remuda
       def work
         while (message = @queue&.pop)
           begin
+            message = hydrate_files(message)
             with_typing(message) { @on_message&.call(message) }
           rescue StandardError => e
             log("on_message failed for #{message.jid}: #{e.class}: #{e.message}")
@@ -287,7 +300,8 @@ module Remuda
         return if @ignore_bots && post.dig("props", "from_bot").to_s == "true"
 
         text = post["message"].to_s
-        return if text.strip.empty?
+        files = attachments_for(post)
+        return if text.strip.empty? && files.empty?
 
         sender = sender.to_s.delete_prefix("@")
         return if @allow && !@allow.include?(sender)
@@ -300,7 +314,8 @@ module Remuda
           text: text,
           sender_name: sender,
           thread_id: root,
-          bot_token_key: me["username"]
+          bot_token_key: me["username"],
+          files: files
         ))
       rescue StandardError => e
         log("dropped post #{post["id"]}: #{e.class}: #{e.message}")
@@ -313,6 +328,58 @@ module Remuda
         return true if mentions.include?(me["id"])
 
         text.match?(/(?<![\w@])@#{Regexp.escape(me["username"].to_s)}(?![\w-])/i)
+      end
+
+      def attachments_for(post)
+        infos = Array(post.dig("metadata", "files"))
+        infos = Array(post["file_ids"]).filter_map { |file_id| file_info(file_id) } if infos.empty?
+        infos.filter_map do |info|
+          next if info["id"].to_s.empty?
+
+          Attachment.new(
+            id: info["id"].to_s,
+            name: info["name"].to_s,
+            mime_type: info["mime_type"].to_s,
+            size: info["size"].to_i,
+            path: nil
+          )
+        end
+      end
+
+      def file_info(file_id)
+        api(:get, "/files/#{file_id}/info")
+      rescue Error => e
+        log("file info #{file_id} failed: #{e.message}")
+        nil
+      end
+
+      def hydrate_files(message)
+        return message if message.files.empty?
+
+        files = message.files.map do |file|
+          next file if file.path
+
+          path = download_file(file)
+          path ? file.with(path: path) : file
+        end
+        message.with(files: files)
+      end
+
+      def download_file(file)
+        data = api(:get, "/files/#{file.id}", raw: true)
+        FileUtils.mkdir_p(@files_dir)
+        path = File.join(@files_dir, "#{file.id}-#{safe_filename(file.name)}")
+        File.binwrite(path, data)
+        path
+      rescue Error, SystemCallError, IOError => e
+        log("download file #{file.id} failed: #{e.message}")
+        nil
+      end
+
+      def safe_filename(name)
+        base = File.basename(name.to_s)
+        base = "file" if base.empty? || base == "." || base == ".."
+        base.gsub(/[^\w.\-]+/, "_")
       end
 
       # true the first time a post id is seen.
@@ -345,11 +412,64 @@ module Remuda
         id.empty? ? nil : id
       end
 
-      def api(method, path, body = nil)
+      def upload_files(channel_id, paths)
+        paths = paths.map(&:to_s).select { |path| File.file?(path) }
+        return [] if paths.empty?
+
+        boundary = "----Remuda#{SecureRandom.hex(16)}"
+        body = +"".b
+        body << multipart_field(boundary, "channel_id", channel_id)
+        paths.each do |path|
+          body << multipart_file(boundary, File.basename(path), File.binread(path), content_type_for(path))
+        end
+        body << "--#{boundary}--\r\n"
+
+        uri = URI("#{@base}/api/v4/files")
+        request = Net::HTTP::Post.new(uri)
+        request["Authorization"] = "Bearer #{@token}"
+        request["Content-Type"] = "multipart/form-data; boundary=#{boundary}"
+        request.body = body
+        response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https",
+                                                           open_timeout: 10, read_timeout: 30) do |http|
+          http.request(request)
+        end
+        payload = response.body.to_s.empty? ? {} : JSON.parse(response.body)
+        unless response.is_a?(Net::HTTPSuccess)
+          detail = payload.is_a?(Hash) ? payload["message"] : nil
+          raise Error, "POST /files: HTTP #{response.code} #{detail}".strip
+        end
+        Array(payload["file_infos"]).map { |info| info["id"] }
+      rescue Error, SystemCallError, IOError, JSON::ParserError => e
+        log("upload files failed: #{e.message}")
+        []
+      end
+
+      def multipart_field(boundary, name, value)
+        "--#{boundary}\r\nContent-Disposition: form-data; name=\"#{name}\"\r\n\r\n#{value}\r\n"
+      end
+
+      def multipart_file(boundary, filename, data, content_type)
+        header = "--#{boundary}\r\nContent-Disposition: form-data; name=\"files\"; filename=\"#{filename}\"\r\n" \
+                 "Content-Type: #{content_type}\r\n\r\n"
+        header.b + data.b + "\r\n".b
+      end
+
+      def content_type_for(path)
+        case File.extname(path).downcase
+        when ".jpg", ".jpeg" then "image/jpeg"
+        when ".png" then "image/png"
+        when ".gif" then "image/gif"
+        when ".webp" then "image/webp"
+        when ".pdf" then "application/pdf"
+        else "application/octet-stream"
+        end
+      end
+
+      def api(method, path, body = nil, raw: false)
         uri = URI("#{@base}/api/v4#{path}")
         request = (method == :post ? Net::HTTP::Post : Net::HTTP::Get).new(uri)
         request["Authorization"] = "Bearer #{@token}"
-        request["Accept"] = "application/json"
+        request["Accept"] = raw ? "*/*" : "application/json"
         if body
           request["Content-Type"] = "application/json"
           request.body = JSON.generate(body)
@@ -359,12 +479,13 @@ module Remuda
                                                            open_timeout: 10, read_timeout: 30) do |http|
           http.request(request)
         end
-        payload = response.body.to_s.empty? ? {} : JSON.parse(response.body)
         unless response.is_a?(Net::HTTPSuccess)
-          detail = payload.is_a?(Hash) ? payload["message"] : nil
+          detail = raw ? nil : (JSON.parse(response.body) rescue {})["message"]
           raise Error, "#{method.upcase} #{path}: HTTP #{response.code} #{detail}".strip
         end
-        payload
+        return response.body.to_s.b if raw
+
+        response.body.to_s.empty? ? {} : JSON.parse(response.body)
       rescue JSON::ParserError
         raise Error, "#{method.upcase} #{path}: response is not JSON"
       end

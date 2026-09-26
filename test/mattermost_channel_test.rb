@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "fileutils"
 require "stringio"
 require "timeout"
+require "tmpdir"
 require "remuda"
 require_relative "support/fake_mattermost"
 
@@ -80,6 +82,25 @@ class MattermostChannelTest < Minitest::Test
     assert_empty drain
   end
 
+  # Break this catches: a photo-only DM dropped because message is empty,
+  # so the agent never sees the image.
+  def test_photo_only_direct_message_arrives_with_the_file
+    @server.add_file(id: "f1", name: "cat.jpg", data: "JPEGDATA")
+    ch = channel
+    ch.handle_event(Posted.(
+      id: "p1", message: "", channel_type: "D", channel_id: "dm-1",
+      file_ids: ["f1"],
+      files: [{ "id" => "f1", "name" => "cat.jpg", "mime_type" => "image/jpeg", "size" => 8 }]
+    ))
+
+    msg = drain.first
+    refute_nil msg, "expected a photo-only DM to be delivered"
+    assert_equal "", msg.text
+    assert_equal "cat.jpg", msg.files.first.name
+    assert_equal "image/jpeg", msg.files.first.mime_type
+    assert_equal "JPEGDATA", File.binread(msg.files.first.path)
+  end
+
   def test_allow_list_limits_senders
     ch = channel(allow: ["@adam"])
     ch.handle_event(Posted.(id: "p1", message: "hi", channel_type: "D", sender: "@mallory"))
@@ -118,6 +139,27 @@ class MattermostChannelTest < Minitest::Test
     assert_nil ch.send_message(jid: "telegram:42", text: "no")
     assert ch.owns_jid?("mattermost:x")
     refute ch.owns_jid?("42")
+  end
+
+  # Break this catches: a reply that is only text when the agent has a photo
+  # to send, so the person never gets the image.
+  def test_send_message_attaches_local_files
+    dir = Dir.mktmpdir
+    path = File.join(dir, "cat.jpg")
+    File.binwrite(path, "JPEGDATA")
+    ch = channel
+    assert_equal "root-1", ch.send_message(
+      jid: "mattermost:ch-9", text: "here", thread_id: "root-1", files: [path]
+    )
+    post = Timeout.timeout(2) { @server.posts.pop }
+    assert_equal "here", post["message"]
+    assert_equal "root-1", post["root_id"]
+    assert_equal ["up-1"], post["file_ids"]
+    upload = Timeout.timeout(2) { @server.uploads.pop }
+    assert_equal "cat.jpg", upload["name"]
+    assert_equal "JPEGDATA", upload["data"]
+  ensure
+    FileUtils.remove_entry(dir) if dir
   end
 
   def test_send_message_failure_returns_nil_and_logs

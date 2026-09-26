@@ -8,7 +8,9 @@ Transports in the gem, bindings in the agent.
   (`lib/remuda/channels/mattermost.rb`); it has first-class bot accounts.
   Telegram and Planet are proven in Agentworks and port when an agent needs
   them; Slack is demand-driven. The `Channel` protocol carries over:
-  one class per transport, `owns_jid?`, `send_message`, poll/receive loop.
+  one class per transport, `owns_jid?`, `send_message` (text plus optional
+  local file paths), poll/receive loop. Inbound `IncomingMessage.files` is a
+  list of `Attachment` (id, name, mime_type, size, path).
 - **Bindings live in the agent**: `.remuda/channels.yml` says *which*
   Telegram bot, *which* Planet workspace this agent answers; tokens come from
   `.env` at the agent root.
@@ -19,9 +21,12 @@ Transports in the gem, bindings in the agent.
   missing tokens fail at load.
 - **Mattermost specifics.** Inbound over the websocket event stream, using a
   stdlib RFC 6455 client (`channels/websocket.rb`), so the gem takes no new
-  dependency. Outbound over REST (`POST /api/v4/posts`). jid is
+  dependency. Outbound over REST (`POST /api/v4/posts`, files via
+  `POST /api/v4/files` then `file_ids`). jid is
   `mattermost:<channel_id>`; thread_id is the root post id. A post counts as
-  inbound when it is a DM or @mentions the bot. Being part of a thread is not
+  inbound when it is a DM or @mentions the bot. File-only posts count too;
+  the adapter downloads them so `IncomingMessage.files` has a local path.
+  Being part of a thread is not
   enough: a reply must tag the bot too. The bot's own
   posts, system posts, and other bots' posts are dropped (`ignore_bots`: no
   bot-to-bot loops).
