@@ -11,7 +11,7 @@ class FakeMattermost
   GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
   BOT = { "id" => "bot-id", "username" => "ops", "is_bot" => true }.freeze
 
-  attr_reader :port, :posts, :typing, :client_frames, :upgrade_headers, :requests
+  attr_reader :port, :posts, :typing, :uploads, :client_frames, :upgrade_headers, :requests
   attr_accessor :token, :channel_posts
 
   def initialize(token: "tok")
@@ -20,12 +20,22 @@ class FakeMattermost
     @port = @server.addr[1]
     @posts = Queue.new
     @typing = Queue.new
+    @uploads = Queue.new
+    @files = {}
     @client_frames = Queue.new
     @requests = []
     @sockets = Queue.new
     @channel_posts = {}
     @threads = []
     @accept = Thread.new { accept_loop }
+  end
+
+  def add_file(id:, name:, data:, mime_type: "image/jpeg")
+    payload = data.to_s.b
+    @files[id] = {
+      "info" => { "id" => id, "name" => name, "mime_type" => mime_type, "size" => payload.bytesize },
+      "data" => payload
+    }
   end
 
   def url
@@ -58,14 +68,17 @@ class FakeMattermost
 
   def self.posted(id:, message:, channel_id: "ch-1", channel_type: "O", user_id: "u-adam",
                   sender: "@adam", root_id: "", mentions: nil, followers: nil, props: {}, type: "",
-                  create_at: (Time.now.to_f * 1000).to_i)
+                  create_at: (Time.now.to_f * 1000).to_i, file_ids: [], files: nil)
+    post = {
+      "id" => id, "channel_id" => channel_id, "user_id" => user_id, "root_id" => root_id,
+      "message" => message, "type" => type, "props" => props, "create_at" => create_at,
+      "file_ids" => file_ids
+    }
+    post["metadata"] = { "files" => files } if files
     data = {
       "channel_type" => channel_type,
       "sender_name" => sender,
-      "post" => JSON.generate(
-        "id" => id, "channel_id" => channel_id, "user_id" => user_id, "root_id" => root_id,
-        "message" => message, "type" => type, "props" => props, "create_at" => create_at
-      )
+      "post" => JSON.generate(post)
     }
     data["mentions"] = JSON.generate(mentions) if mentions
     data["followers"] = JSON.generate(followers) if followers
@@ -126,6 +139,22 @@ class FakeMattermost
     in ["POST", "/api/v4/users/me/typing"]
       @typing << JSON.parse(body)
       reply(client, 200, { "status" => "ok" })
+    in ["GET", %r{\A/api/v4/files/([^/]+)/info\z}]
+      file = @files[path[%r{files/([^/]+)/info}, 1]]
+      file ? reply(client, 200, file["info"]) : reply(client, 404, { "message" => "file not found" })
+    in ["GET", %r{\A/api/v4/files/([^/]+)\z}]
+      file = @files[path.split("/").last]
+      file ? reply_raw(client, 200, file["data"]) : reply(client, 404, { "message" => "file not found" })
+    in ["POST", "/api/v4/files"]
+      uploaded = parse_multipart(headers, body)
+      infos = uploaded.map do |part|
+        @file_count = (@file_count || 0) + 1
+        id = "up-#{@file_count}"
+        add_file(id: id, name: part["name"], data: part["data"], mime_type: part["mime_type"])
+        @uploads << part.merge("id" => id)
+        @files[id]["info"]
+      end
+      reply(client, 201, { "file_infos" => infos, "client_ids" => [] })
     else reply(client, 404, { "message" => "no route #{verb} #{path}" })
     end
   end
@@ -135,6 +164,29 @@ class FakeMattermost
     client.write("HTTP/1.1 #{status} X\r\nContent-Type: application/json\r\n" \
                  "Content-Length: #{json.bytesize}\r\nConnection: close\r\n\r\n#{json}")
     client.close
+  end
+
+  def reply_raw(client, status, payload)
+    body = payload.to_s.b
+    client.write("HTTP/1.1 #{status} X\r\nContent-Type: application/octet-stream\r\n" \
+                 "Content-Length: #{body.bytesize}\r\nConnection: close\r\n\r\n".b + body)
+    client.close
+  end
+
+  def parse_multipart(headers, body)
+    boundary = headers["content-type"].to_s[/boundary=(.+)/, 1]
+    return [] if boundary.nil?
+
+    body.split("--#{boundary}").filter_map do |part|
+      next if part.strip.empty? || part.strip == "--"
+
+      head, data = part.split("\r\n\r\n", 2)
+      next unless head&.include?("filename=") && data
+
+      name = head[/filename="([^"]*)"/, 1]
+      mime = head[/Content-Type:\s*(\S+)/i, 1] || "application/octet-stream"
+      { "name" => name, "mime_type" => mime, "data" => data.sub(/\r\n\z/, "").b }
+    end
   end
 
   def upgrade(client, headers)
