@@ -27,11 +27,12 @@ module Remuda
         status = wait.fetch("StatusCode", 1).to_i
         text = decode_logs(container.logs(stdout: true, stderr: true))
         container.delete(force: true)
+        parsed = PiJsonl.parse(text)
 
         AgentResult.new(
-          output: text,
-          session_id: nil,
-          usage: nil,
+          output: parsed[:output],
+          session_id: parsed[:session_id],
+          usage: parsed[:usage],
           ok: status.zero?,
           exit_code: status,
           image: Image.for(agent_dir)
