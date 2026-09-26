@@ -8,8 +8,13 @@ module Remuda
   AgentResult = Struct.new(:output, :session_id, :usage, :ok, :exit_code, :image, keyword_init: true)
 
   module Sandbox
+    # Mattermost and ticks call Remuda.agent. docker-api/Excon default is 60s;
+    # wait() must pass a matching read_timeout or the HTTP client drops first.
+    WAIT_SECONDS = 3600
+
     def self.run(agent_dir, prompt)
       agent_dir = File.expand_path(agent_dir)
+      configure_wait_timeout!
 
       Dir.mktmpdir("remuda-sandbox") do |tmpdir|
         File.chmod(0o700, tmpdir)
@@ -23,10 +28,15 @@ module Remuda
         )
 
         container.start
-        wait = container.wait(180)
-        status = wait.fetch("StatusCode", 1).to_i
-        text = decode_logs(container.logs(stdout: true, stderr: true))
-        container.delete(force: true)
+        wait = nil
+        text = ""
+        begin
+          wait = container.wait(WAIT_SECONDS)
+          text = decode_logs(container.logs(stdout: true, stderr: true))
+        ensure
+          container.delete(force: true)
+        end
+        status = (wait || {}).fetch("StatusCode", 1).to_i
         parsed = PiJsonl.parse(text)
 
         AgentResult.new(
@@ -135,6 +145,14 @@ module Remuda
       ["GH_TOKEN=#{token}", "GITHUB_TOKEN=#{token}"]
     end
     private_class_method :github_env
+
+    def self.configure_wait_timeout!
+      Docker.options = Docker.options.merge(
+        read_timeout: WAIT_SECONDS,
+        write_timeout: WAIT_SECONDS
+      )
+    end
+    private_class_method :configure_wait_timeout!
 
     def self.tmpfs
       { "/tmp" => tmpfs_flags }

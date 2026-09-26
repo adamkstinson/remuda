@@ -45,6 +45,13 @@ class InteractiveTest < Minitest::Test
     assert File.directory?(File.join(DUMMY, ".pi", "agent", "sessions"))
   end
 
+  def test_sandbox_waits_up_to_an_hour
+    assert_equal 3600, Remuda::Sandbox::WAIT_SECONDS
+    source = File.read(File.join(ROOT, "lib/remuda/sandbox.rb"))
+    assert_match(/container\.wait\(WAIT_SECONDS\)/, source)
+    assert_match(/configure_wait_timeout!/, source)
+  end
+
   def test_batch_agent_still_passes_no_session
     Dir.mktmpdir("prompt") do |dir|
       prompt = File.join(dir, "prompt.txt")
