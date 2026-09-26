@@ -11,7 +11,7 @@ class FakeMattermost
   GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
   BOT = { "id" => "bot-id", "username" => "ops", "is_bot" => true }.freeze
 
-  attr_reader :port, :posts, :client_frames, :upgrade_headers, :requests
+  attr_reader :port, :posts, :typing, :client_frames, :upgrade_headers, :requests
   attr_accessor :token, :channel_posts
 
   def initialize(token: "tok")
@@ -19,6 +19,7 @@ class FakeMattermost
     @server = TCPServer.new("127.0.0.1", 0)
     @port = @server.addr[1]
     @posts = Queue.new
+    @typing = Queue.new
     @client_frames = Queue.new
     @requests = []
     @sockets = Queue.new
@@ -122,6 +123,9 @@ class FakeMattermost
       @posts << post
       @post_count = (@post_count || 0) + 1
       reply(client, 201, post.merge("id" => "new-#{@post_count}"))
+    in ["POST", "/api/v4/users/me/typing"]
+      @typing << JSON.parse(body)
+      reply(client, 200, { "status" => "ok" })
     else reply(client, 404, { "message" => "no route #{verb} #{path}" })
     end
   end

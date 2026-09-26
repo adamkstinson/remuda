@@ -22,6 +22,7 @@ module Remuda
     # Reconnects with backoff. After a reconnect it backfills posts created
     # since the last one seen, so a dropped socket does not drop a message.
     # The cursor lives in memory; pass since: to resume across restarts.
+    # While on_message runs, the bot pulses typing on the channel and thread.
     class Mattermost < Channel
       NAME = "mattermost"
       PREFIX = "mattermost:"
@@ -50,7 +51,7 @@ module Remuda
 
       def initialize(url:, token:, mentions_only: true, ignore_bots: true,
                      allow: nil, since: nil, reconnect_delay: 5, max_reconnect_delay: 60,
-                     ping_interval: 30, logger: $stderr)
+                     ping_interval: 30, typing_interval: 3, logger: $stderr)
         super()
         @base = url.to_s.chomp("/")
         @token = token
@@ -61,6 +62,7 @@ module Remuda
         @reconnect_delay = reconnect_delay
         @max_reconnect_delay = max_reconnect_delay
         @ping_interval = ping_interval
+        @typing_interval = typing_interval
         @logger = logger
         @seen = []
         @seen_set = Set.new
@@ -84,6 +86,7 @@ module Remuda
 
       # Inbound is handed to on_message on one worker thread, in arrival order,
       # so a handler that runs an agent for minutes never stalls the socket.
+      # While that handler runs, the bot pulses typing on the channel and thread.
       def start!
         return if @running
 
@@ -165,11 +168,44 @@ module Remuda
       def work
         while (message = @queue&.pop)
           begin
-            @on_message&.call(message)
+            with_typing(message) { @on_message&.call(message) }
           rescue StandardError => e
             log("on_message failed for #{message.jid}: #{e.class}: #{e.message}")
           end
         end
+      end
+
+      # Mattermost hides the typing bubble after a few seconds, so pulse until
+      # the handler returns. Channel typing is the footer; parent_id is the thread.
+      def with_typing(message)
+        done = Queue.new
+        thread = Thread.new do
+          loop do
+            pulse_typing(message)
+            break unless done.pop(timeout: @typing_interval).nil?
+          end
+        end
+        yield
+      ensure
+        done << true if done
+        thread&.join(2)
+      end
+
+      def pulse_typing(message)
+        channel_id = channel_id_for(message.jid)
+        return unless channel_id
+
+        indicate_typing(channel_id)
+        parent = message.thread_id.to_s
+        indicate_typing(channel_id, parent) unless parent.empty?
+      end
+
+      def indicate_typing(channel_id, parent_id = nil)
+        body = { channel_id: channel_id }
+        body[:parent_id] = parent_id if parent_id
+        api(:post, "/users/me/typing", body)
+      rescue Error, SystemCallError, IOError, Timeout::Error => e
+        log("typing in #{channel_id} failed: #{e.message}")
       end
 
       def run
