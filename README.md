@@ -202,7 +202,8 @@ A message carries `jid` (where to reply: `mattermost:<channel_id>`),
 `thread_id` (the root post; reply with it to stay in the thread),
 `sender_name`, and `text`. Inbound arrives over the Mattermost websocket and
 goes to `on_message` on one worker thread, in order, so a long agent run
-does not stall the socket. The adapter reconnects with backoff. After a
+does not stall the socket. While that handler runs, the bot shows as typing
+in the channel and the thread. The adapter reconnects with backoff. After a
 reconnect it backfills posts it missed, so a dropped connection does not
 drop a message.
 

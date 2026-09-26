@@ -172,6 +172,36 @@ class MattermostChannelTest < Minitest::Test
     assert_match(/boom/, @log.string)
   end
 
+  # Break this catches: a minutes-long agent run with no typing bubble, so
+  # the person thinks the bot never saw the message.
+  def test_handler_shows_typing_until_it_returns
+    gate = Queue.new
+    ch = channel(typing_interval: 0.05)
+    ch.on_message { |msg| gate.pop; @inbox << msg }
+    ch.start!
+    @server.socket
+    @server.push(Posted.(id: "p1", message: "status?", channel_id: "dm-1", channel_type: "D"))
+
+    sleep 0.16
+    seen = []
+    seen << @server.typing.pop until @server.typing.empty?
+    refute_empty seen, "expected typing while the handler ran"
+    assert seen.size >= 4, "expected typing to pulse while the handler ran, got #{seen.inspect}"
+    assert seen.any? { |event| event["channel_id"] == "dm-1" && !event.key?("parent_id") },
+           "expected channel typing, got #{seen.inspect}"
+    assert seen.any? { |event| event["parent_id"] == "p1" },
+           "expected thread typing for the root, got #{seen.inspect}"
+
+    gate << :go
+    assert_equal "p1", next_message.thread_id
+    sleep 0.16
+    @server.typing.pop until @server.typing.empty?
+    sleep 0.16
+    assert @server.typing.empty?, "typing continued after the handler returned"
+  ensure
+    gate << :go if gate
+  end
+
   # Break this catches: a slow agent run stalling the socket (no pongs).
   def test_slow_handler_does_not_block_the_socket
     gate = Queue.new
