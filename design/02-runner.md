@@ -165,6 +165,7 @@ JSONL into tables is optional (05).
 
 ```ruby
 result = Remuda.agent(prompt, context: { ... })
+result = Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")  # per-call override
 # → output, session_id, usage, ok, exit_code
 ```
 

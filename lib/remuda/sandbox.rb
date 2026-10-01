@@ -12,7 +12,7 @@ module Remuda
     # wait() must pass a matching read_timeout or the HTTP client drops first.
     WAIT_SECONDS = 3600
 
-    def self.run(agent_dir, prompt)
+    def self.run(agent_dir, prompt, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
       configure_wait_timeout!
 
@@ -24,7 +24,7 @@ module Remuda
         ensure_pi_agent_dir(agent_dir)
 
         container = Docker::Container.create(
-          batch_spec(agent_dir, prompt_path: prompt_path)
+          batch_spec(agent_dir, prompt_path: prompt_path, provider: provider, model: model)
         )
 
         container.start
@@ -50,15 +50,19 @@ module Remuda
       end
     end
 
-    def self.batch_spec(agent_dir, prompt_path:)
+    # Without provider: / model:, Pi picks its own default from the agent's
+    # settings.json. Remuda does not declare a second one.
+    def self.batch_spec(agent_dir, prompt_path:, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
       cmd = [
         "--mode", "json",
         "--print",
         "--approve",
-        "--no-session",
-        "@/run/remuda/prompt.txt"
+        "--no-session"
       ]
+      cmd.push("--provider", provider.to_s) unless provider.to_s.empty?
+      cmd.push("--model", model.to_s) unless model.to_s.empty?
+      cmd << "@/run/remuda/prompt.txt"
       {
         "Image" => Image.for(agent_dir),
         "Entrypoint" => ["pi"],
