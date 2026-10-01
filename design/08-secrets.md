@@ -61,6 +61,19 @@ responsibility — the directory cannot edit its own sandbox. Ship this wiring
 as if *all* sandbox HTTPS will go through the gateway, even if v0 still
 reaches the model API directly.
 
+**Header-declared MCP (laptop path).** A server whose `mcp.json` entry
+declares `headers` is reached through a per-run forwarder on the host
+(`Remuda::McpForwarder`). The runner rewrites the agent's copy of `mcp.json`
+to point that server at the forwarder with no headers, mounts the copy over
+`/agent/mcp.json`, and the forwarder adds the declared headers (filled from
+`.env`, then the process env) on the way to the real URL. It is a streaming
+reverse proxy, not an MCP client, and lives only as long as the container.
+Each run's paths start with a random token, so another container on the host
+cannot use it. A missing variable fails closed (`401`, never a blank
+credential). This is not the TLS-intercept gateway below; it is the small
+answer for URLs we are allowed to rewrite. The host `mcp.json` is unchanged
+and host `Remuda.tool` still calls the real URL.
+
 **Self-hosted MCP** is the same shape without a proxy: the MCP server holds
 the service credential; the caller reaches an endpoint. The gateway
 generalizes that to SaaS we don't host (Gmail, QuickBooks). Both are
