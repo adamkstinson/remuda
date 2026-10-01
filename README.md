@@ -226,6 +226,68 @@ mm.send_message(jid: mm.dm_jid("adam"), text: "Nightly run finished.")
 mm.send_message(jid: mm.channel_jid(team: "team", channel: "ops"), text: "…")
 ```
 
+### Microsoft Teams
+
+Teams works the other way around from Mattermost. Microsoft's Bot Connector
+POSTs every message to an HTTPS endpoint you host, and the bot replies over
+REST. No SDK; the transport is `Remuda::Channels::Teams`.
+
+```yaml
+# .remuda/channels.yml
+transports:
+  teams:
+    app_id_env: TEAMS_APP_ID          # defaults shown; the values live in .env
+    app_secret_env: TEAMS_APP_SECRET
+    tenant_id_env: TEAMS_TENANT_ID
+    # mentions_only: true             # personal chats, and posts that @mention the bot
+    # allow: [<entra object id>]      # only these senders reach the agent
+```
+
+The channel is a Rack app: it responds to `call(env)`. Serve it from a host
+app (`mount Remuda.channels(dir)[:teams], at: "/api/messages"`) or with any
+Rack server. TLS in front of it (Caddy, …) is yours:
+
+```ruby
+# config.ru in the agent directory
+require "remuda"
+teams = Remuda.channels(__dir__)[:teams]
+teams.on_message do |msg|
+  result = Remuda.agent("Reply to #{msg.sender_name}: #{msg.text}")
+  teams.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id)
+end
+teams.start!
+run teams
+```
+
+Every POST must carry a Bot Framework JWT: an RS256 token signed by a key from
+Microsoft's OpenID metadata, issued by `https://api.botframework.com`, with
+your app id as audience and a `serviceUrl` claim that matches the activity.
+Anything else gets `401`. A replayed activity id is dropped. The POST is
+answered `200` at once, and `on_message` runs on one worker thread.
+
+`jid` is `teams:<conversation id>`, `thread_id` is the root message of a
+channel thread (or the activity id in a chat), and `sender_name` is the
+display name. `allow:` matches Entra object ids, not names. To message
+someone first (a digest, "shipment ready for review"), the bot needs a
+conversation reference from an earlier message in that conversation. References
+are stored in the agent's SQLite (`channel_sessions`), so
+`send_message(jid:, text:)` still works after a restart. Text and Markdown
+only: no Adaptive Cards and no files in v1.
+
+One-time setup:
+
+1. Microsoft Entra ID: a **single-tenant** app registration. Note the
+   application (client) id and tenant id, and create a client secret.
+2. An Azure Bot resource on that app id. Enable the Microsoft Teams channel
+   and set the messaging endpoint to `https://<your host>/api/messages`.
+3. A Teams app package (manifest plus two icons) with `bots[].botId` = the
+   app id and scope `personal` (plus `team` / `groupChat` if wanted). Upload
+   it for pilot users or publish it to the org catalog. The tenant's Teams
+   admin must allow custom apps.
+
+Put the three values in the agent's `.env` as `TEAMS_APP_ID`,
+`TEAMS_APP_SECRET`, `TEAMS_TENANT_ID`.
+
 Not shipped yet: a `remuda` command that supervises channels, and durable
 channel state (the cursor is in memory; pass `since:` to resume). See
 [design/06-channels.md](design/06-channels.md).

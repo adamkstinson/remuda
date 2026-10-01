@@ -8,3 +8,9 @@
 #     mentions_only: true           # DMs and posts that tag @bot (threads too)
 #     ignore_bots: true             # never answer another bot (no loops)
 #     # allow: [adam]               # only these usernames reach the agent
+#   teams:                          # Microsoft Teams (Bot Framework webhook)
+#     app_id_env: TEAMS_APP_ID      # single-tenant Entra app registration
+#     app_secret_env: TEAMS_APP_SECRET
+#     tenant_id_env: TEAMS_TENANT_ID
+#     mentions_only: true           # personal chats, and posts that @mention the bot
+#     # allow: [<entra object id>]  # only these senders reach the agent
