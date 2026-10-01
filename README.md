@@ -311,7 +311,9 @@ remuda
 
 That is `docker run --rm -it` of the image in `.remuda/image` (default
 `remuda-pi:latest`). Same sandbox `Remuda.agent` uses. The directory you ran
-from is mounted at `/agent` read-write.
+from is mounted at `/agent` read-write, except `.env` (masked, empty in the
+box) and `.remuda/` (masked, apart from `.remuda/workflows/`). Workflows are
+writable here and read-only for `Remuda.agent`.
 
 The sandbox adds `host.docker.internal` → host gateway. Set
 `REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `mcp.json` may list both a
