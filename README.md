@@ -267,10 +267,12 @@ copy-pasteable crontab line that runs Remuda tick (not `.agentworks/bin/tick`):
 * * * * * cd /path/to/ops && remuda tick >> /path/to/ops/.remuda/tick.log 2>&1
 ```
 
-No daemon. Install that one line on the host crontab. Tick fires unpaused rows
-with `next_occurrence <= now` through the same Runner (`trigger: "schedule"`),
-then advances `last_occurrence` / `next_occurrence`. If that workflow still has
-a `running` row, the new run is `skipped`.
+No daemon. Install that one line on the host crontab. Tick finds unpaused rows
+with `next_occurrence <= now`, advances `last_occurrence` / `next_occurrence`
+first, then fires the workflow through the same Runner (`trigger: "schedule"`).
+A run that outlasts the minute is not seen as due again by the next tick, and
+when two ticks race for one occurrence only one wins it. If that workflow still
+has a `running` row, the new run is `skipped`.
 
 ```bash
 remuda tick           # inside the agent
