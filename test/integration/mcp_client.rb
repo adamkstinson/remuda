@@ -13,8 +13,8 @@
 # docker0 -> host traffic.
 #
 # A fake Plane MCP server and a fake OpenAI-compatible model run on the host.
-# The model calls plane_list_projects when Pi offers it; the run passes when
-# the tool result comes back as the reply.
+# The model calls plane_list_projects, then channels_send_message on a bound
+# test transport; the check passes when both land on the host.
 require "remuda"
 require "fileutils"
 require "tmpdir"
@@ -22,6 +22,8 @@ require "socket"
 require "json"
 
 LOG = []
+SENT = []
+CALL = { tool: "plane_list_projects", args: "{}" }
 IMAGE = ENV.fetch("IMAGE", "remuda-pi:latest")
 HOST_NETWORK = ENV["REMUDA_CHECK_NETWORK"] == "host"
 MODEL_BIND = HOST_NETWORK ? "127.0.0.1" : Remuda::McpForwarder.bind_address
@@ -81,7 +83,7 @@ model = http_server(MODEL_BIND) do |s, method, path, h, body|
     content = tool_msg["content"].is_a?(Array) ? tool_msg["content"].map { |p| p["text"] }.join : tool_msg["content"].to_s
     chunk.({ role: "assistant", content: "TOOL SAID: #{content}" }) + chunk.({}, "stop")
   else
-    name, args = tools.include?("plane_list_projects") ? ["plane_list_projects", "{}"] : ["mcp", JSON.generate(tool: "plane_list_projects", args: "{}")]
+    name, args = tools.include?(CALL[:tool]) ? [CALL[:tool], CALL[:args]] : ["mcp", JSON.generate(tool: CALL[:tool], args: CALL[:args])]
     chunk.({ role: "assistant", tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: name, arguments: args } }] }) + chunk.({}, "tool_calls")
   end
   sse += "data: [DONE]\n\n"
@@ -92,6 +94,18 @@ dir = Dir.mktmpdir("remuda-mcp-check")
 at_exit { FileUtils.rm_rf(dir) }
 FileUtils.mkdir_p(["#{dir}/.remuda/workflows", "#{dir}/.pi/agent"])
 File.write("#{dir}/AGENTS.md", "Test agent.\n")
+FileUtils.mkdir_p("#{dir}/files")
+File.write("#{dir}/files/note.txt", "note")
+File.write("#{dir}/.remuda/channels.yml", "transports:\n  recorder: {}\n")
+
+# A channel transport that records instead of posting.
+class Recorder < Remuda::Channels::Channel
+  def self.from_config(*) = new
+  def name = "recorder"
+  def owns_jid?(jid) = jid.start_with?("rec:")
+  def send_message(**message) = (SENT << message; "thread-9")
+end
+Remuda::Channels.register_transport("recorder", Recorder)
 File.write("#{dir}/.remuda/image", "#{IMAGE}\n")
 File.write("#{dir}/.env", "PLANE_API_KEY=sekrit\n")
 File.write("#{dir}/mcp.json", JSON.pretty_generate(
@@ -119,7 +133,18 @@ offered = LOG.any? { |line| line.start_with?("LLM") && line.include?("plane_list
 called = LOG.include?("MCP rpc tools/call")
 keyed = LOG.grep(/\AMCP (POST|GET)/).all? { |line| line.include?('key="sekrit"') }
 answered = result.output.to_s.include?("projects: Alpha, Beta")
+
+LOG.clear
+CALL.merge!(tool: "channels_send_message",
+            args: JSON.generate(jid: "rec:ops", text: "hello from the box", files: ["/agent/files/note.txt"]))
+sent = Remuda::Sandbox.run(dir, "Say hello on the channel.")
+puts LOG
+puts "output: #{sent.output}"
+delivered = SENT.size == 1 && SENT.first[:text] == "hello from the box" &&
+            SENT.first[:files] == [File.join(File.realpath(dir), "files/note.txt")]
+
 checks = { "Pi offered plane_list_projects" => offered, "tool call reached Plane" => called,
-           "forwarder added the key" => keyed, "result came back" => answered }
+           "forwarder added the key" => keyed, "result came back" => answered,
+           "channels_send_message delivered on the host" => delivered }
 checks.each { |name, ok| puts "#{ok ? "ok  " : "FAIL"} #{name}" }
 exit(checks.values.all? ? 0 : 1)
