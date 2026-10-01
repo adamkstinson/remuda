@@ -170,6 +170,29 @@ there; the file is never mounted into the sandbox.
 
 #### MCP from inside the sandbox
 
+The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
+([pi-mcp-adapter](https://www.npmjs.com/package/pi-mcp-adapter), pinned in
+`image/Dockerfile`) and points it at `/agent/mcp.json` and nothing else. A
+directory declares its servers in its root `mcp.json`, the same file
+`Remuda.tool` reads. Not `.pi/mcp.json` and not `.mcp.json`, which the box
+ignores. Client options sit next to the URL:
+
+```json
+{
+  "settings": { "toolPrefix": "server" },
+  "mcpServers": {
+    "plane": {
+      "url": "https://plane.example.com/mcp",
+      "headers": { "X-Plane-Key": "{{PLANE_API_KEY}}" },
+      "directTools": true
+    }
+  }
+}
+```
+
+With `directTools: true` Pi sees `plane_list_projects` and the rest as its
+own tools. Without it Pi reaches them through one `mcp` proxy tool.
+
 The sandbox reaches MCP servers that declare `headers` through a per-run
 forwarder on the host. `mcp.json` stays the declaration and is not changed on
 disk. For each run Remuda writes a copy and mounts it read-only over
@@ -299,6 +322,17 @@ a `running` row, the new run is `skipped`.
 ```bash
 remuda tick           # inside the agent
 remuda tick ./ops
+```
+
+### Images
+
+Build the sandbox images from `image/` when the Dockerfiles change. They are
+not rebuilt when the gem bumps:
+
+```bash
+docker build -t remuda-pi:latest image/
+docker build -t remuda-coding:latest -f image/Dockerfile.coding image/
+ruby -Ilib test/integration/mcp_client.rb   # Pi in the image can call MCP
 ```
 
 ## Interactive Pi (sandboxed)
