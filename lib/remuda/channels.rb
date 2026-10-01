@@ -120,7 +120,7 @@ module Remuda
     def self.load(agent_dir = nil)
       dir = File.expand_path(agent_dir || Current.agent_dir || Dir.pwd)
       path = File.join(dir, ".remuda/channels.yml")
-      config = File.file?(path) ? (YAML.safe_load_file(path) || {}) : {}
+      config = read_config(dir)
       env = Directory.env_vars(dir)
 
       registry = Registry.new
@@ -132,6 +132,60 @@ module Remuda
         registry.register(klass.from_config(spec || {}, env))
       end
       registry
+    end
+
+    # Does the agent bind any transport? Reads channels.yml only; it does not
+    # build the channels, so it needs no token.
+    def self.bound?(agent_dir = nil)
+      transports = read_config(File.expand_path(agent_dir || Current.agent_dir || Dir.pwd))["transports"]
+      transports.is_a?(Hash) && !transports.empty?
+    end
+
+    def self.read_config(dir)
+      path = File.join(dir, ".remuda/channels.yml")
+      config = File.file?(path) ? YAML.safe_load_file(path) : nil
+      config.is_a?(Hash) ? config : {}
+    end
+    private_class_method :read_config
+
+    # channels.send_message as a tool: the same call for a workflow script
+    # (Remuda.tool) and for the sandboxed agent (ChannelsMcp).
+    module SendTool
+      NAME = "send_message"
+      DESCRIPTION = "Send a message on one of this agent's channels (Mattermost, ...). " \
+                    "Returns the thread it landed in."
+      SCHEMA = {
+        "type" => "object",
+        "properties" => {
+          "jid" => { "type" => "string",
+                     "description" => "Channel address, e.g. mattermost:<channel_id>. Use the jid a message came from to answer it." },
+          "text" => { "type" => "string", "description" => "Message text (Markdown)." },
+          "thread_id" => { "type" => "string", "description" => "Reply in this thread. Omit to start a new one." },
+          "files" => { "type" => "array", "items" => { "type" => "string" },
+                       "description" => "Paths of files to attach." }
+        },
+        "required" => %w[jid text]
+      }.freeze
+
+      def self.catalog_entry
+        { server: "channels", name: NAME, description: DESCRIPTION, input_schema: SCHEMA }
+      end
+
+      def self.call(registry, args)
+        args = args.transform_keys(&:to_s)
+        jid = args["jid"].to_s
+        raise ArgumentError, "send_message needs jid and text" if jid.empty? || args["text"].nil?
+
+        thread = registry.send_message(
+          jid: jid,
+          text: args["text"].to_s,
+          thread_id: args["thread_id"],
+          files: args["files"]
+        )
+        raise "channels.send_message: not delivered to #{jid}" if thread.nil?
+
+        { "thread_id" => thread }
+      end
     end
   end
 
