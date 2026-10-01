@@ -168,6 +168,30 @@ ANTHROPIC_API_KEY=sk-ant-...
 Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens may live
 there; the file is never mounted into the sandbox.
 
+#### MCP from inside the sandbox
+
+The sandbox reaches MCP servers that declare `headers` through a per-run
+forwarder on the host. `mcp.json` stays the declaration and is not changed on
+disk. For each run Remuda writes a copy and mounts it read-only over
+`/agent/mcp.json`:
+
+- a server with `headers` points at
+  `http://host.docker.internal:<port>/<run token>/<server>` and carries no
+  headers. The forwarder fills the declared headers (`{{VAR}}` from the agent
+  `.env`, then the process environment, the same rule as `Remuda.tool`) and
+  passes the request, streaming, to the real URL.
+- a server with no `headers` keeps its URL; the agent calls it directly.
+- a declared variable with no value is not sent blank. The forwarder answers
+  that server with `401` and names the missing variable.
+
+A token the workflow sets on the process before `Remuda.agent` (for example a
+refreshed `GMAIL_MCP_TOKEN`) reaches the forwarder the same way. The forwarder
+starts with the container and stops when it exits, for `Remuda.agent` and for
+interactive `remuda`. It listens on the Docker bridge address, and every path
+starts with a random token only that run's `mcp.json` holds. `.env` is still
+never mounted. On a host with a firewall (ufw), allow the bridge in
+(`ufw allow in on docker0`) or the box cannot reach the forwarder.
+
 ## Channels
 
 How a person reaches an agent, and how the agent answers. Transports live in
