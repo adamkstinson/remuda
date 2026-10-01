@@ -1,0 +1,16 @@
+#!/bin/sh
+# Remuda's Pi profile: every Pi in this image loads the MCP client
+# (pi-mcp-adapter). The client reads one file, the agent's /agent/mcp.json,
+# which the runner mounts as a secret-free copy (see design/08-secrets.md).
+PI=/usr/local/bin/pi
+ADAPTER=/usr/local/lib/node_modules/pi-mcp-adapter
+
+case "${1:-}" in
+  install|remove|uninstall|update|list|config|auth) exec "$PI" "$@" ;;
+esac
+
+if [ -f /agent/mcp.json ]; then
+  export PI_MCP_CONFIG_MODE=exclusive
+  exec "$PI" -e "$ADAPTER" --mcp-config /agent/mcp.json "$@"
+fi
+exec "$PI" -e "$ADAPTER" "$@"

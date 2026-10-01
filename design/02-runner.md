@@ -22,7 +22,11 @@ the host. Two doors share one container definition:
   one container image.
 - **Remuda ships a curated Pi profile** as part of the harness (its own config,
   skills it relies on, structured-output settings). The agent directory layers
-  its own `.pi/` on top. Framework config vs app config.
+  its own `.pi/` on top. Framework config vs app config. Today the profile is
+  `image/pi-profile/pi`, first on `PATH` in both images: it loads the MCP
+  client (`pi-mcp-adapter`, pinned in the Dockerfiles) and points it, in
+  exclusive mode, at `/agent/mcp.json`. That file is the one declaration; the
+  box reads no `.mcp.json` or `.pi/mcp.json`.
 - **Interactive and unattended share one sandbox posture.** Same image, same
   uid, same credential set, same HostConfig builder. `Remuda.agent` runs Pi
   with a prompt and exits; bare `remuda` allocates a TTY. Working on an agent
@@ -121,7 +125,7 @@ The agent directory is not one writable “brain.”
 | `AGENTS.md`, `.pi/`, skills, `files/` | `/agent` rw | rw | rw |
 | `.remuda/workflows/` | `/agent/.remuda/workflows` | **ro** | rw |
 | prompt file | `/run/remuda/prompt.txt` | ro | — |
-| remuda Pi profile | in the image (or a ro mount) | ro | ro |
+| remuda Pi profile (`image/pi-profile/`) | in the image | ro | ro |
 | `mcp.json` (per-run rewrite, see 08) | `/agent/mcp.json` | ro, secret-free | ro, secret-free |
 | `.remuda/db/` | **not mounted** | | |
 | `.remuda/` as a whole | **not mounted** | | |
