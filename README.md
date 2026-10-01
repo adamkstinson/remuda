@@ -150,10 +150,19 @@ agent’s Pi user dir (`auth.json`, sessions, model catalog, `settings.json`).
 It does **not** pass `--offline`. The agent `.env` is never mounted. Host
 `~/.pi/agent` is not used.
 
-`Remuda.agent` does not pass `--provider` / `--model`. Pi uses
+By default `Remuda.agent` does not pass `--provider` / `--model`. Pi uses
 `defaultProvider` / `defaultModel` from that `settings.json` (set in
 interactive `remuda` with `/model`, Ctrl+S). Remuda does not declare a
-second default.
+second default. Override it for one call with `provider:` / `model:`:
+
+```ruby
+Remuda.agent(prompt)                                                # Pi's default
+Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")
+Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolves the provider
+```
+
+The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
+`PI_MODEL` are not a fallback for it.
 
 Put credentials in `<agent>/.pi/agent/auth.json` (login inside `remuda`), or
 synthesize them from the agent `.env` (`PI_PROVIDER` plus that provider’s API
