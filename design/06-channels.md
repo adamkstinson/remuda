@@ -51,6 +51,16 @@ Transports in the gem, bindings in the agent.
   gem, no SDK). Text and Markdown in v1.
 - **Channel state is rows** (`channel_cursors`, `channel_sessions`,
   `channel_messages` — see [05-state](./05-state.md)), not JSON files.
+- **Outbound is a tool.** With any transport bound, `channels.send_message`
+  is in the tool catalog. `Remuda.tool("channels.send_message", jid:, text:,
+  thread_id:, files:)` sends through the registry and records a step like an
+  MCP call. The sandboxed agent gets the same tool as `channels_send_message`:
+  the runner adds a `channels` entry to the box's `mcp.json` pointing at the
+  per-run forwarder, which answers it in-process on the host
+  (`Remuda::ChannelsMcp`). The token stays in `.env`, the send is a step on
+  the run, and attachments resolve from `/agent/...` to the agent directory
+  on the host, never to `.env` or `.remuda/`. `Remuda.channels(dir)` stays the
+  direct API for listeners.
 - **Inbound resolves to an invocation** through the same runner seam as
   workflows (a message-triggered `Remuda.agent` with conversation context), so
   channel-driven work is sandboxed and recorded like everything else.
@@ -71,6 +81,3 @@ Transports in the gem, bindings in the agent.
   05-state lands, so a restarted daemon backfills too.
 - Ordering/dedup guarantees per conversation (Agentworks had offset tokens;
   formalize per-`jid` serialization?).
-- Outbound-only use (a workflow posting a digest) — does that go through the
-  channel adapter directly (`Remuda.channels.telegram.send_message`), and does
-  it self-record as a step? (Consistency says yes.)

@@ -22,7 +22,11 @@ the host. Two doors share one container definition:
   one container image.
 - **Remuda ships a curated Pi profile** as part of the harness (its own config,
   skills it relies on, structured-output settings). The agent directory layers
-  its own `.pi/` on top. Framework config vs app config.
+  its own `.pi/` on top. Framework config vs app config. Today the profile is
+  `image/pi-profile/pi`, first on `PATH` in both images: it loads the MCP
+  client (`pi-mcp-adapter`, pinned in the Dockerfiles) and points it, in
+  exclusive mode, at `/agent/mcp.json`. That file is the one declaration; the
+  box reads no `.mcp.json` or `.pi/mcp.json`.
 - **Interactive and unattended share one sandbox posture.** Same image, same
   uid, same credential set, same HostConfig builder. `Remuda.agent` runs Pi
   with a prompt and exits; bare `remuda` allocates a TTY. Working on an agent
@@ -42,6 +46,10 @@ the host. Two doors share one container definition:
   directory's identity, `.pi/`, skills, and `files/` go in; host MCP tokens
   do not. Do not source the agent's `.env` inside the image (agent-box did;
   we don't).
+- **`mcp.json` is in the box, rewritten per run.** The runner mounts a
+  secret-free copy over `/agent/mcp.json`; servers that declare `headers`
+  point at a per-run host forwarder that adds them (see
+  [08-secrets](./08-secrets.md)). The host file is never rewritten.
 - **No `--host` flag.** Unsandboxed Pi is `pi` in the directory yourself.
 - **Do not depend on `agentbox`.** Fold the proven bits (Engine API wait/reaper,
   prompt-as-file, cap-drop, read-only rootfs). Leave the multi-runtime registry,
@@ -70,7 +78,7 @@ One image, independent of the gem version. Payload is Pi plus git/ripgrep/ca-cer
 **Batch (`Remuda.agent`):**
 
 ```
-pi --mode json --print --approve --no-session
+pi --mode json --print --approve
 ```
 
 `--approve` so `/agent/.pi` and `AGENTS.md` load. Ruby parses Pi's public
@@ -117,12 +125,18 @@ The agent directory is not one writable “brain.”
 | `AGENTS.md`, `.pi/`, skills, `files/` | `/agent` rw | rw | rw |
 | `.remuda/workflows/` | `/agent/.remuda/workflows` | **ro** | rw |
 | prompt file | `/run/remuda/prompt.txt` | ro | — |
-| remuda Pi profile | in the image (or a ro mount) | ro | ro |
-| `mcp.json` | `/agent/mcp.json` | ro, secret-free | ro |
+| remuda Pi profile (`image/pi-profile/`) | in the image | ro | ro |
+| `mcp.json` (per-run rewrite, see 08) | `/agent/mcp.json` | ro, secret-free | ro, secret-free |
 | `.remuda/db/` | **not mounted** | | |
 | `.remuda/` as a whole | **not mounted** | | |
 | `.env` | **not mounted** | | |
 | `.remuda/bin/`, `Gemfile` | not mounted | | |
+
+The directory is one rw bind; the exceptions sit on top of it. `.env` (when
+present) is masked by `/dev/null`, `.remuda/` by an empty root-owned tmpfs,
+and `.remuda/workflows/` is bound back over that tmpfs with the door's write
+bit. Nothing is masked that does not exist on the host, because Docker would
+create the mount target in the operator's directory as root.
 
 Pi memory stays files. A jailbroken Pi can trash `files/` and `.pi/agent/`
 (including `auth.json`); it cannot rewrite run history or steal host MCP
@@ -154,17 +168,18 @@ Network on in v0 (the model API has to be reached until the gateway takes it).
 `--network host` is a laptop shortcut for localhost MCP and a hole; default
 bridge + explicit MCP routes is the next tightening.
 
-Batch `Remuda.agent` still passes `--no-session` unless a workflow asks for a
-session id (follow-up in the same run). The **queryable** record of that turn
-is the `workflow_steps` row, parsed from Pi’s `--mode json` stream (text, tool
-events, usage). Interactive `remuda` does not pass `--no-session`; Pi persists
-under `.pi/agent/sessions`. SQLite is not Pi’s session disk. A later index of
-JSONL into tables is optional (05).
+Batch `Remuda.agent` no longer passes `--no-session`; every run, batch or
+interactive, persists under `.pi/agent/sessions`. The **queryable** record of
+that turn is still the `workflow_steps` row, parsed from Pi’s `--mode json`
+stream (text, tool events, usage); the session file is the full transcript
+Pi already knows how to write. SQLite is not Pi’s session disk. A later index
+of JSONL into tables is optional (05).
 
 ## Interface sketch
 
 ```ruby
 result = Remuda.agent(prompt, context: { ... })
+result = Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")  # per-call override
 # → output, session_id, usage, ok, exit_code
 ```
 
@@ -182,6 +197,3 @@ remuda console  # not the sandbox — IRB, see 07
 - Whether to index `.pi/agent/sessions` JSONL into SQLite for ad-hoc SQL, or
   query files + `workflow_steps` only.
 - `Remuda.agent` result object: exact fields we normalize from Pi JSONL.
-- Whether `mcp.json` belongs in the box at all in v0 (secret-free URLs to
-  self-hosted MCP are consistent with credential-at-the-edge; third-party MCP
-  waits on the gateway tuple).

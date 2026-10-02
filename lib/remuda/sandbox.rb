@@ -12,7 +12,7 @@ module Remuda
     # wait() must pass a matching read_timeout or the HTTP client drops first.
     WAIT_SECONDS = 3600
 
-    def self.run(agent_dir, prompt)
+    def self.run(agent_dir, prompt, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
       configure_wait_timeout!
 
@@ -23,18 +23,20 @@ module Remuda
         File.chmod(0o644, prompt_path)
         ensure_pi_agent_dir(agent_dir)
 
-        container = Docker::Container.create(
-          batch_spec(agent_dir, prompt_path: prompt_path)
-        )
-
-        container.start
         wait = nil
         text = ""
-        begin
-          wait = container.wait(WAIT_SECONDS)
-          text = decode_logs(container.logs(stdout: true, stderr: true))
-        ensure
-          container.delete(force: true)
+        local = ChannelsMcp.routes(agent_dir, run: Current.run)
+        McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
+          container = Docker::Container.create(
+            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model)
+          )
+          begin
+            container.start
+            wait = container.wait(WAIT_SECONDS)
+            text = decode_logs(container.logs(stdout: true, stderr: true))
+          ensure
+            container.delete(force: true)
+          end
         end
         status = (wait || {}).fetch("StatusCode", 1).to_i
         parsed = PiJsonl.parse(text)
@@ -50,15 +52,19 @@ module Remuda
       end
     end
 
-    def self.batch_spec(agent_dir, prompt_path:)
+    # Without provider: / model:, Pi picks its own default from the agent's
+    # settings.json. Remuda does not declare a second one.
+    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
+      ensure_pi_agent_dir(agent_dir)
       cmd = [
         "--mode", "json",
         "--print",
-        "--approve",
-        "--no-session",
-        "@/run/remuda/prompt.txt"
+        "--approve"
       ]
+      cmd.push("--provider", provider.to_s) unless provider.to_s.empty?
+      cmd.push("--model", model.to_s) unless model.to_s.empty?
+      cmd << "@/run/remuda/prompt.txt"
       {
         "Image" => Image.for(agent_dir),
         "Entrypoint" => ["pi"],
@@ -70,16 +76,17 @@ module Remuda
           "Binds" => binds(
             agent_dir,
             prompt_path: prompt_path,
+            mcp_path: mcp_path,
             workflows_mode: "ro"
           ),
           "CapDrop" => ["ALL"],
-          "Tmpfs" => tmpfs,
+          "Tmpfs" => tmpfs(agent_dir),
           "ExtraHosts" => extra_hosts
         }
       }
     end
 
-    def self.interactive_spec(agent_dir)
+    def self.interactive_spec(agent_dir, mcp_path: nil)
       agent_dir = File.expand_path(agent_dir)
       {
         "Image" => Image.for(agent_dir),
@@ -90,29 +97,40 @@ module Remuda
         "User" => "#{Process.uid}:#{Process.gid}",
         "Env" => sandbox_env(agent_dir),
         "HostConfig" => {
-          "Binds" => binds(agent_dir, workflows_mode: "rw"),
+          "Binds" => binds(agent_dir, mcp_path: mcp_path, workflows_mode: "rw"),
           "CapDrop" => ["ALL"],
-          "Tmpfs" => tmpfs,
+          "Tmpfs" => tmpfs(agent_dir),
           "ExtraHosts" => extra_hosts
         }
       }
     end
 
+    # Runs docker as a child, not exec, so the MCP forwarder can live for
+    # the length of the session.
     def self.attach(agent_dir)
-      exec(*attach_args(agent_dir))
+      agent_dir = File.expand_path(agent_dir)
+      Dir.mktmpdir("remuda-sandbox") do |tmpdir|
+        File.chmod(0o700, tmpdir)
+        McpForwarder.open(agent_dir, tmpdir, local: ChannelsMcp.routes(agent_dir)) do |mcp_path, _forwarder|
+          system(*attach_args(agent_dir, mcp_path: mcp_path))
+        end
+      end
+      $?&.exitstatus
     end
 
-    def self.attach_args(agent_dir)
+    def self.attach_args(agent_dir, mcp_path: nil)
       agent_dir = File.expand_path(agent_dir)
       ensure_pi_agent_dir(agent_dir)
-      spec = interactive_spec(agent_dir)
+      spec = interactive_spec(agent_dir, mcp_path: mcp_path)
       args = [
         "docker", "run", "--rm", "-it",
         "--user", spec["User"],
         "--workdir", "/agent",
-        "--entrypoint", "pi",
-        "--tmpfs", "/tmp:#{tmpfs_flags}"
+        "--entrypoint", "pi"
       ]
+      spec.dig("HostConfig", "Tmpfs").each do |path, flags|
+        args << "--tmpfs" << "#{path}:#{flags}"
+      end
       extra_hosts.each do |pair|
         args << "--add-host" << pair
       end
@@ -154,8 +172,14 @@ module Remuda
     end
     private_class_method :configure_wait_timeout!
 
-    def self.tmpfs
-      { "/tmp" => tmpfs_flags }
+    # .remuda/ is masked by an empty root-owned tmpfs (db, bin, Gemfile stay
+    # on the host); workflows/ is bind-mounted back on top of it.
+    def self.tmpfs(agent_dir)
+      mounts = { "/tmp" => tmpfs_flags }
+      if File.directory?(File.join(agent_dir, ".remuda"))
+        mounts["/agent/.remuda"] = "rw,nosuid,nodev,noexec,size=64k,mode=0755"
+      end
+      mounts
     end
     private_class_method :tmpfs
 
@@ -181,9 +205,16 @@ module Remuda
     end
     private_class_method :ensure_pi_agent_dir
 
-    def self.binds(agent_dir, prompt_path: nil, workflows_mode: "rw")
-      mounts = ["#{File.expand_path(agent_dir)}:/agent:rw"]
+    # Only mask what exists: Docker creates a missing mount target, and in a
+    # bind-mounted directory that is a root-owned file on the host.
+    def self.binds(agent_dir, prompt_path: nil, mcp_path: nil, workflows_mode: "rw")
+      agent_dir = File.expand_path(agent_dir)
+      mounts = ["#{agent_dir}:/agent:rw"]
+      mounts << "/dev/null:/agent/.env:ro" if File.exist?(File.join(agent_dir, ".env"))
+      workflows = File.join(agent_dir, ".remuda", "workflows")
+      mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}" if File.directory?(workflows)
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
+      mounts << "#{mcp_path}:/agent/mcp.json:ro" if mcp_path
       mounts
     end
     private_class_method :binds

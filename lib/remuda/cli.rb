@@ -36,7 +36,8 @@ module Remuda
       when "help", "--help", "-h"
         help
       when nil
-        Sandbox.attach(Directory.find(nil))
+        status = Sandbox.attach(Directory.find(nil))
+        exit(status || 1) unless status&.zero?
       else
         raise ArgumentError, "unknown command: #{cmd}"
       end

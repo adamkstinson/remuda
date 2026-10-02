@@ -52,12 +52,21 @@ class InteractiveTest < Minitest::Test
     assert_match(/configure_wait_timeout!/, source)
   end
 
-  def test_batch_agent_still_passes_no_session
+  def test_batch_agent_does_not_pass_no_session
     Dir.mktmpdir("prompt") do |dir|
       prompt = File.join(dir, "prompt.txt")
       File.write(prompt, "hi")
       spec = Remuda::Sandbox.batch_spec(DUMMY, prompt_path: prompt)
-      assert_includes spec["Cmd"], "--no-session"
+      refute_includes spec["Cmd"], "--no-session"
+    end
+  end
+
+  def test_batch_agent_creates_the_sessions_directory
+    Dir.mktmpdir("prompt") do |dir|
+      prompt = File.join(dir, "prompt.txt")
+      File.write(prompt, "hi")
+      Remuda::Sandbox.batch_spec(DUMMY, prompt_path: prompt)
+      assert File.directory?(File.join(DUMMY, ".pi", "agent", "sessions"))
     end
   end
 
