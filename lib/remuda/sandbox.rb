@@ -52,11 +52,11 @@ module Remuda
 
     def self.batch_spec(agent_dir, prompt_path:)
       agent_dir = File.expand_path(agent_dir)
+      ensure_pi_agent_dir(agent_dir)
       cmd = [
         "--mode", "json",
         "--print",
         "--approve",
-        "--no-session",
         "@/run/remuda/prompt.txt"
       ]
       {
