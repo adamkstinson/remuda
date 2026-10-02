@@ -129,7 +129,7 @@ module Remuda
           raise ArgumentError,
                 "unknown channel transport #{name.inspect} in #{path} (known: #{TRANSPORTS.keys.join(", ")})"
         end
-        registry.register(klass.from_config(spec || {}, env))
+        registry.register(build(klass, spec || {}, env, dir))
       end
       registry
     end
@@ -189,6 +189,15 @@ module Remuda
     end
   end
 
+  module Channels
+    # Transports that keep state across restarts (Teams) take agent_dir:.
+    def self.build(klass, spec, env, dir)
+      takes_dir = klass.method(:from_config).parameters.any? { |kind, name| name == :agent_dir || kind == :keyrest }
+      takes_dir ? klass.from_config(spec, env, agent_dir: dir) : klass.from_config(spec, env)
+    end
+    private_class_method :build
+  end
+
   def self.channels(agent_dir = nil)
     Channels.load(agent_dir)
   end
@@ -196,3 +205,5 @@ end
 
 require_relative "channels/websocket"
 require_relative "channels/mattermost"
+require_relative "channels/bot_framework_auth"
+require_relative "channels/teams"

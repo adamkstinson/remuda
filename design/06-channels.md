@@ -35,6 +35,20 @@ Transports in the gem, bindings in the agent.
   bot pulses typing on the channel and the thread so the person sees it
   working (`POST /users/me/typing`). Reconnect with backoff,
   then backfill posts since the cursor. Dedup is by post id.
+- **Teams specifics.** Inbound is a webhook: the Bot Connector POSTs
+  activities, so the transport is a Rack app (`call(env)`) a host app mounts
+  or any Rack server serves; TLS is the operator's. Each POST is
+  authenticated by its Bot Framework JWT (RS256 against the OpenID metadata
+  JWKS, cached and refetched on an unknown kid; issuer, audience = app id,
+  expiry, `serviceUrl` claim = activity, key endorsed for the channel),
+  answered 200 at once, and handed to `on_message` on a worker thread.
+  Outbound is Bot Connector REST with a client-credentials token from the
+  single-tenant Entra app, cached until expiry. jid is
+  `teams:<conversation id>`; thread_id is the channel thread's root message
+  id (`;messageid=`), else the activity id. Conversation references (service
+  URL, conversation, tenant, bot) are `channel_sessions` rows, so proactive
+  messages survive a restart. Dedup by activity id. Stdlib only (no `jwt`
+  gem, no SDK). Text and Markdown in v1.
 - **Channel state is rows** (`channel_cursors`, `channel_sessions`,
   `channel_messages` — see [05-state](./05-state.md)), not JSON files.
 - **Outbound is a tool.** With any transport bound, `channels.send_message`
