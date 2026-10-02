@@ -150,10 +150,19 @@ agent’s Pi user dir (`auth.json`, sessions, model catalog, `settings.json`).
 It does **not** pass `--offline`. The agent `.env` is never mounted. Host
 `~/.pi/agent` is not used.
 
-`Remuda.agent` does not pass `--provider` / `--model`. Pi uses
+By default `Remuda.agent` does not pass `--provider` / `--model`. Pi uses
 `defaultProvider` / `defaultModel` from that `settings.json` (set in
 interactive `remuda` with `/model`, Ctrl+S). Remuda does not declare a
-second default.
+second default. Override it for one call with `provider:` / `model:`:
+
+```ruby
+Remuda.agent(prompt)                                                # Pi's default
+Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")
+Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolves the provider
+```
+
+The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
+`PI_MODEL` are not a fallback for it.
 
 Put credentials in `<agent>/.pi/agent/auth.json` (login inside `remuda`), or
 synthesize them from the agent `.env` (`PI_PROVIDER` plus that provider’s API
@@ -314,10 +323,12 @@ copy-pasteable crontab line that runs Remuda tick (not `.agentworks/bin/tick`):
 * * * * * cd /path/to/ops && remuda tick >> /path/to/ops/.remuda/tick.log 2>&1
 ```
 
-No daemon. Install that one line on the host crontab. Tick fires unpaused rows
-with `next_occurrence <= now` through the same Runner (`trigger: "schedule"`),
-then advances `last_occurrence` / `next_occurrence`. If that workflow still has
-a `running` row, the new run is `skipped`.
+No daemon. Install that one line on the host crontab. Tick finds unpaused rows
+with `next_occurrence <= now`, advances `last_occurrence` / `next_occurrence`
+first, then fires the workflow through the same Runner (`trigger: "schedule"`).
+A run that outlasts the minute is not seen as due again by the next tick, and
+when two ticks race for one occurrence only one wins it. If that workflow still
+has a `running` row, the new run is `skipped`.
 
 ```bash
 remuda tick           # inside the agent
