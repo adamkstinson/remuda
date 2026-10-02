@@ -54,11 +54,11 @@ module Remuda
     # settings.json. Remuda does not declare a second one.
     def self.batch_spec(agent_dir, prompt_path:, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
+      ensure_pi_agent_dir(agent_dir)
       cmd = [
         "--mode", "json",
         "--print",
-        "--approve",
-        "--no-session"
+        "--approve"
       ]
       cmd.push("--provider", provider.to_s) unless provider.to_s.empty?
       cmd.push("--model", model.to_s) unless model.to_s.empty?
