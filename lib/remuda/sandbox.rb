@@ -79,7 +79,7 @@ module Remuda
             workflows_mode: "ro"
           ),
           "CapDrop" => ["ALL"],
-          "Tmpfs" => tmpfs,
+          "Tmpfs" => tmpfs(agent_dir),
           "ExtraHosts" => extra_hosts
         }
       }
@@ -98,7 +98,7 @@ module Remuda
         "HostConfig" => {
           "Binds" => binds(agent_dir, mcp_path: mcp_path, workflows_mode: "rw"),
           "CapDrop" => ["ALL"],
-          "Tmpfs" => tmpfs,
+          "Tmpfs" => tmpfs(agent_dir),
           "ExtraHosts" => extra_hosts
         }
       }
@@ -125,9 +125,11 @@ module Remuda
         "docker", "run", "--rm", "-it",
         "--user", spec["User"],
         "--workdir", "/agent",
-        "--entrypoint", "pi",
-        "--tmpfs", "/tmp:#{tmpfs_flags}"
+        "--entrypoint", "pi"
       ]
+      spec.dig("HostConfig", "Tmpfs").each do |path, flags|
+        args << "--tmpfs" << "#{path}:#{flags}"
+      end
       extra_hosts.each do |pair|
         args << "--add-host" << pair
       end
@@ -169,8 +171,14 @@ module Remuda
     end
     private_class_method :configure_wait_timeout!
 
-    def self.tmpfs
-      { "/tmp" => tmpfs_flags }
+    # .remuda/ is masked by an empty root-owned tmpfs (db, bin, Gemfile stay
+    # on the host); workflows/ is bind-mounted back on top of it.
+    def self.tmpfs(agent_dir)
+      mounts = { "/tmp" => tmpfs_flags }
+      if File.directory?(File.join(agent_dir, ".remuda"))
+        mounts["/agent/.remuda"] = "rw,nosuid,nodev,noexec,size=64k,mode=0755"
+      end
+      mounts
     end
     private_class_method :tmpfs
 
@@ -196,8 +204,14 @@ module Remuda
     end
     private_class_method :ensure_pi_agent_dir
 
+    # Only mask what exists: Docker creates a missing mount target, and in a
+    # bind-mounted directory that is a root-owned file on the host.
     def self.binds(agent_dir, prompt_path: nil, mcp_path: nil, workflows_mode: "rw")
-      mounts = ["#{File.expand_path(agent_dir)}:/agent:rw"]
+      agent_dir = File.expand_path(agent_dir)
+      mounts = ["#{agent_dir}:/agent:rw"]
+      mounts << "/dev/null:/agent/.env:ro" if File.exist?(File.join(agent_dir, ".env"))
+      workflows = File.join(agent_dir, ".remuda", "workflows")
+      mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}" if File.directory?(workflows)
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
       mounts << "#{mcp_path}:/agent/mcp.json:ro" if mcp_path
       mounts

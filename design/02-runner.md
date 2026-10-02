@@ -128,6 +128,12 @@ The agent directory is not one writable “brain.”
 | `.env` | **not mounted** | | |
 | `.remuda/bin/`, `Gemfile` | not mounted | | |
 
+The directory is one rw bind; the exceptions sit on top of it. `.env` (when
+present) is masked by `/dev/null`, `.remuda/` by an empty root-owned tmpfs,
+and `.remuda/workflows/` is bound back over that tmpfs with the door's write
+bit. Nothing is masked that does not exist on the host, because Docker would
+create the mount target in the operator's directory as root.
+
 Pi memory stays files. A jailbroken Pi can trash `files/` and `.pi/agent/`
 (including `auth.json`); it cannot rewrite run history or steal host MCP
 tokens. Do not copy `~/.pi/agent` into an agent directory.
