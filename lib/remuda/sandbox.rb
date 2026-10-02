@@ -23,18 +23,19 @@ module Remuda
         File.chmod(0o644, prompt_path)
         ensure_pi_agent_dir(agent_dir)
 
-        container = Docker::Container.create(
-          batch_spec(agent_dir, prompt_path: prompt_path, provider: provider, model: model)
-        )
-
-        container.start
         wait = nil
         text = ""
-        begin
-          wait = container.wait(WAIT_SECONDS)
-          text = decode_logs(container.logs(stdout: true, stderr: true))
-        ensure
-          container.delete(force: true)
+        McpForwarder.open(agent_dir, tmpdir) do |mcp_path, _forwarder|
+          container = Docker::Container.create(
+            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model)
+          )
+          begin
+            container.start
+            wait = container.wait(WAIT_SECONDS)
+            text = decode_logs(container.logs(stdout: true, stderr: true))
+          ensure
+            container.delete(force: true)
+          end
         end
         status = (wait || {}).fetch("StatusCode", 1).to_i
         parsed = PiJsonl.parse(text)
@@ -52,7 +53,7 @@ module Remuda
 
     # Without provider: / model:, Pi picks its own default from the agent's
     # settings.json. Remuda does not declare a second one.
-    def self.batch_spec(agent_dir, prompt_path:, provider: nil, model: nil)
+    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
       ensure_pi_agent_dir(agent_dir)
       cmd = [
@@ -74,6 +75,7 @@ module Remuda
           "Binds" => binds(
             agent_dir,
             prompt_path: prompt_path,
+            mcp_path: mcp_path,
             workflows_mode: "ro"
           ),
           "CapDrop" => ["ALL"],
@@ -83,7 +85,7 @@ module Remuda
       }
     end
 
-    def self.interactive_spec(agent_dir)
+    def self.interactive_spec(agent_dir, mcp_path: nil)
       agent_dir = File.expand_path(agent_dir)
       {
         "Image" => Image.for(agent_dir),
@@ -94,7 +96,7 @@ module Remuda
         "User" => "#{Process.uid}:#{Process.gid}",
         "Env" => sandbox_env(agent_dir),
         "HostConfig" => {
-          "Binds" => binds(agent_dir, workflows_mode: "rw"),
+          "Binds" => binds(agent_dir, mcp_path: mcp_path, workflows_mode: "rw"),
           "CapDrop" => ["ALL"],
           "Tmpfs" => tmpfs,
           "ExtraHosts" => extra_hosts
@@ -102,14 +104,23 @@ module Remuda
       }
     end
 
+    # Runs docker as a child, not exec, so the MCP forwarder can live for
+    # the length of the session.
     def self.attach(agent_dir)
-      exec(*attach_args(agent_dir))
+      agent_dir = File.expand_path(agent_dir)
+      Dir.mktmpdir("remuda-sandbox") do |tmpdir|
+        File.chmod(0o700, tmpdir)
+        McpForwarder.open(agent_dir, tmpdir) do |mcp_path, _forwarder|
+          system(*attach_args(agent_dir, mcp_path: mcp_path))
+        end
+      end
+      $?&.exitstatus
     end
 
-    def self.attach_args(agent_dir)
+    def self.attach_args(agent_dir, mcp_path: nil)
       agent_dir = File.expand_path(agent_dir)
       ensure_pi_agent_dir(agent_dir)
-      spec = interactive_spec(agent_dir)
+      spec = interactive_spec(agent_dir, mcp_path: mcp_path)
       args = [
         "docker", "run", "--rm", "-it",
         "--user", spec["User"],
@@ -185,9 +196,10 @@ module Remuda
     end
     private_class_method :ensure_pi_agent_dir
 
-    def self.binds(agent_dir, prompt_path: nil, workflows_mode: "rw")
+    def self.binds(agent_dir, prompt_path: nil, mcp_path: nil, workflows_mode: "rw")
       mounts = ["#{File.expand_path(agent_dir)}:/agent:rw"]
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
+      mounts << "#{mcp_path}:/agent/mcp.json:ro" if mcp_path
       mounts
     end
     private_class_method :binds

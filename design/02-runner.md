@@ -42,6 +42,10 @@ the host. Two doors share one container definition:
   directory's identity, `.pi/`, skills, and `files/` go in; host MCP tokens
   do not. Do not source the agent's `.env` inside the image (agent-box did;
   we don't).
+- **`mcp.json` is in the box, rewritten per run.** The runner mounts a
+  secret-free copy over `/agent/mcp.json`; servers that declare `headers`
+  point at a per-run host forwarder that adds them (see
+  [08-secrets](./08-secrets.md)). The host file is never rewritten.
 - **No `--host` flag.** Unsandboxed Pi is `pi` in the directory yourself.
 - **Do not depend on `agentbox`.** Fold the proven bits (Engine API wait/reaper,
   prompt-as-file, cap-drop, read-only rootfs). Leave the multi-runtime registry,
@@ -118,7 +122,7 @@ The agent directory is not one writable “brain.”
 | `.remuda/workflows/` | `/agent/.remuda/workflows` | **ro** | rw |
 | prompt file | `/run/remuda/prompt.txt` | ro | — |
 | remuda Pi profile | in the image (or a ro mount) | ro | ro |
-| `mcp.json` | `/agent/mcp.json` | ro, secret-free | ro |
+| `mcp.json` (per-run rewrite, see 08) | `/agent/mcp.json` | ro, secret-free | ro, secret-free |
 | `.remuda/db/` | **not mounted** | | |
 | `.remuda/` as a whole | **not mounted** | | |
 | `.env` | **not mounted** | | |
@@ -183,6 +187,3 @@ remuda console  # not the sandbox — IRB, see 07
 - Whether to index `.pi/agent/sessions` JSONL into SQLite for ad-hoc SQL, or
   query files + `workflow_steps` only.
 - `Remuda.agent` result object: exact fields we normalize from Pi JSONL.
-- Whether `mcp.json` belongs in the box at all in v0 (secret-free URLs to
-  self-hosted MCP are consistent with credential-at-the-edge; third-party MCP
-  waits on the gateway tuple).
