@@ -25,7 +25,8 @@ module Remuda
 
         wait = nil
         text = ""
-        McpForwarder.open(agent_dir, tmpdir) do |mcp_path, _forwarder|
+        local = ChannelsMcp.routes(agent_dir, run: Current.run)
+        McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
           container = Docker::Container.create(
             batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model)
           )
@@ -110,7 +111,7 @@ module Remuda
       agent_dir = File.expand_path(agent_dir)
       Dir.mktmpdir("remuda-sandbox") do |tmpdir|
         File.chmod(0o700, tmpdir)
-        McpForwarder.open(agent_dir, tmpdir) do |mcp_path, _forwarder|
+        McpForwarder.open(agent_dir, tmpdir, local: ChannelsMcp.routes(agent_dir)) do |mcp_path, _forwarder|
           system(*attach_args(agent_dir, mcp_path: mcp_path))
         end
       end

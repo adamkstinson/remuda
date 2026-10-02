@@ -282,6 +282,40 @@ mm.send_message(jid: mm.dm_jid("adam"), text: "Nightly run finished.")
 mm.send_message(jid: mm.channel_jid(team: "team", channel: "ops"), text: "…")
 ```
 
+### Channels as a tool
+
+When `channels.yml` binds at least one transport, `channels.send_message` is a
+tool like any MCP tool. `remuda tools` lists it, and with no bindings it is not
+there.
+
+From a workflow script it goes through `Remuda.tool` and is recorded as a
+`workflow_steps` row (`kind: "tool"`, `name: "channels.send_message"`). It
+raises when no channel delivers:
+
+```ruby
+Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.",
+                                     thread_id: nil, files: ["files/digest.pdf"])
+# => { "thread_id" => "…" }
+```
+
+Inside the sandbox Pi sees it as `channels_send_message`. The runner adds a
+`channels` server to the box's `mcp.json` that points at the per-run
+forwarder, and the forwarder answers it on the host with the agent's bound
+channels. `MATTERMOST_TOKEN` never enters the container. Each send is a step
+on the run that started the box. The agent attaches files by their in-box
+path (`/agent/files/report.pdf`). Paths outside the agent directory, `.env`,
+and `.remuda/` are refused. To have the agent answer where it was asked, put
+the `jid` and `thread_id` in the prompt:
+
+```ruby
+Remuda.agent(<<~PROMPT)
+  #{msg.sender_name} asked: #{msg.text}
+  When you are done, reply with channels_send_message to jid #{msg.jid}, thread_id #{msg.thread_id}.
+PROMPT
+```
+
+A server named `channels` in `mcp.json` takes precedence over the built-in one.
+
 Not shipped yet: a `remuda` command that supervises channels, and durable
 channel state (the cursor is in memory; pass `since:` to resume). See
 [design/06-channels.md](design/06-channels.md).

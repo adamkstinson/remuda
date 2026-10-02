@@ -28,16 +28,24 @@ module Remuda
     ].freeze
     PLACEHOLDER = /\{\{(\w+)\}\}/
 
-    Route = Data.define(:name, :upstream, :headers, :missing)
+    # A route forwards to upstream with headers, or, with a handler, is
+    # answered in-process (handler.call(method, body) -> [status, headers, body]).
+    Route = Data.define(:name, :upstream, :headers, :missing, :handler) do
+      def initialize(name:, upstream: nil, headers: {}, missing: [], handler: nil)
+        super
+      end
+    end
 
     # Rewrite the agent's mcp.json for this run and serve it until the block
-    # returns. Yields the path of the secret-free copy (nil without mcp.json)
-    # and the running forwarder (nil when no server needs one).
-    def self.open(agent_dir, tmpdir)
+    # returns. Yields the path of the secret-free copy (nil without mcp.json
+    # or local servers) and the running forwarder (nil when no server needs
+    # one). local: adds host-side servers ({ "channels" => handler }) that
+    # exist only for the box; a server the agent declares by that name wins.
+    def self.open(agent_dir, tmpdir, local: {})
       host_file = File.join(File.expand_path(agent_dir), "mcp.json")
-      return yield(nil, nil) unless File.file?(host_file)
+      return yield(nil, nil) if !File.file?(host_file) && local.empty?
 
-      config = JSON.parse(File.read(host_file))
+      config = File.file?(host_file) ? JSON.parse(File.read(host_file)) : { "mcpServers" => {} }
       token = SecureRandom.hex(16)
       forwarder = new({}, token: token, bind: bind_address)
       forwarder.start
@@ -47,6 +55,7 @@ module Remuda
           vars: Directory.env_vars(agent_dir),
           base_url: "http://#{CONTAINER_HOST}:#{forwarder.port}/#{token}"
         )
+        add_local(agent_config, routes, local, "http://#{CONTAINER_HOST}:#{forwarder.port}/#{token}")
         forwarder.routes = routes
         path = File.join(tmpdir, "mcp.json")
         File.write(path, JSON.pretty_generate(agent_config))
@@ -56,6 +65,16 @@ module Remuda
         forwarder.stop
       end
     end
+
+    def self.add_local(agent_config, routes, local, base_url)
+      local.each do |name, handler|
+        next if agent_config["mcpServers"].key?(name)
+
+        routes[name] = Route.new(name: name, handler: handler)
+        agent_config["mcpServers"][name] = { "url" => "#{base_url}/#{name}", "directTools" => true }
+      end
+    end
+    private_class_method :add_local
 
     # Pure: the agent's copy of mcp.json and the forwarder's route table.
     def self.plan(config, vars:, base_url:, env: ENV)
@@ -170,6 +189,8 @@ module Remuda
                                     "#{route.missing.join(", ")}, which is not set on the host\n")
       end
 
+      return answer(socket, route, method, headers) if route.handler
+
       forward(socket, route, method, rest, headers, sent)
     rescue StandardError => e
       @logger&.puts("remuda forwarder: #{route&.name || "request"} failed: #{e.class}")
@@ -230,6 +251,31 @@ module Remuda
             socket.flush
           end
         end
+      end
+    end
+
+    def answer(socket, route, method, headers)
+      body = read_body(socket, headers)
+      status, response_headers, response_body = route.handler.call(method, body)
+      lines = ["HTTP/1.1 #{status} #{status == 200 ? "OK" : "Status"}"]
+      response_headers.each { |key, value| lines << "#{key}: #{value}" }
+      lines << "Content-Length: #{response_body.bytesize}" << "Connection: close"
+      socket.write("#{lines.join("\r\n")}\r\n\r\n#{response_body}")
+    end
+
+    def read_body(socket, headers)
+      length = header(headers, "content-length").to_i
+      if header(headers, "transfer-encoding").to_s.downcase.include?("chunked")
+        reader = ChunkedReader.new(socket)
+        out = +""
+        while (part = reader.read(16_384))
+          out << part
+        end
+        out
+      elsif length.positive?
+        socket.read(length)
+      else
+        ""
       end
     end
 
