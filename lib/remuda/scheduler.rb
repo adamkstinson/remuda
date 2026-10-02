@@ -36,14 +36,12 @@ module Remuda
       now = Time.now.utc
       due = Schedule.where(paused: false).where("next_occurrence <= ?", now)
       due.find_each do |schedule|
+        next unless claim(schedule, now)
+
         Runner.new(@agent_dir).run(
           schedule.workflow,
           trigger: "schedule",
           inputs: schedule.inputs || {}
-        )
-        schedule.update!(
-          last_occurrence: now,
-          next_occurrence: next_time(schedule, now)
         )
       end
     end
@@ -88,6 +86,16 @@ module Remuda
       raise ArgumentError, "invalid cron: #{cron.inspect}" unless parsed
 
       parsed
+    end
+
+    # Advance the row before the workflow runs, so a tick in the next cron
+    # minute finds nothing due. The update is conditional on the value this
+    # tick read: when two ticks race, only one of them wins the occurrence.
+    def claim(schedule, now)
+      claimed = Schedule
+        .where(id: schedule.id, next_occurrence: schedule.next_occurrence)
+        .update_all(last_occurrence: now, next_occurrence: next_time(schedule, now))
+      claimed == 1
     end
 
     def next_time(schedule, now)
