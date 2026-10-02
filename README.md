@@ -150,10 +150,19 @@ agent’s Pi user dir (`auth.json`, sessions, model catalog, `settings.json`).
 It does **not** pass `--offline`. The agent `.env` is never mounted. Host
 `~/.pi/agent` is not used.
 
-`Remuda.agent` does not pass `--provider` / `--model`. Pi uses
+By default `Remuda.agent` does not pass `--provider` / `--model`. Pi uses
 `defaultProvider` / `defaultModel` from that `settings.json` (set in
 interactive `remuda` with `/model`, Ctrl+S). Remuda does not declare a
-second default.
+second default. Override it for one call with `provider:` / `model:`:
+
+```ruby
+Remuda.agent(prompt)                                                # Pi's default
+Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")
+Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolves the provider
+```
+
+The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
+`PI_MODEL` are not a fallback for it.
 
 Put credentials in `<agent>/.pi/agent/auth.json` (login inside `remuda`), or
 synthesize them from the agent `.env` (`PI_PROVIDER` plus that provider’s API
@@ -167,6 +176,53 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens may live
 there; the file is never mounted into the sandbox.
+
+#### MCP from inside the sandbox
+
+The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
+([pi-mcp-adapter](https://www.npmjs.com/package/pi-mcp-adapter), pinned in
+`image/Dockerfile`) and points it at `/agent/mcp.json` and nothing else. A
+directory declares its servers in its root `mcp.json`, the same file
+`Remuda.tool` reads. Not `.pi/mcp.json` and not `.mcp.json`, which the box
+ignores. Client options sit next to the URL:
+
+```json
+{
+  "settings": { "toolPrefix": "server" },
+  "mcpServers": {
+    "plane": {
+      "url": "https://plane.example.com/mcp",
+      "headers": { "X-Plane-Key": "{{PLANE_API_KEY}}" },
+      "directTools": true
+    }
+  }
+}
+```
+
+With `directTools: true` Pi sees `plane_list_projects` and the rest as its
+own tools. Without it Pi reaches them through one `mcp` proxy tool.
+
+The sandbox reaches MCP servers that declare `headers` through a per-run
+forwarder on the host. `mcp.json` stays the declaration and is not changed on
+disk. For each run Remuda writes a copy and mounts it read-only over
+`/agent/mcp.json`:
+
+- a server with `headers` points at
+  `http://host.docker.internal:<port>/<run token>/<server>` and carries no
+  headers. The forwarder fills the declared headers (`{{VAR}}` from the agent
+  `.env`, then the process environment, the same rule as `Remuda.tool`) and
+  passes the request, streaming, to the real URL.
+- a server with no `headers` keeps its URL; the agent calls it directly.
+- a declared variable with no value is not sent blank. The forwarder answers
+  that server with `401` and names the missing variable.
+
+A token the workflow sets on the process before `Remuda.agent` (for example a
+refreshed `GMAIL_MCP_TOKEN`) reaches the forwarder the same way. The forwarder
+starts with the container and stops when it exits, for `Remuda.agent` and for
+interactive `remuda`. It listens on the Docker bridge address, and every path
+starts with a random token only that run's `mcp.json` holds. `.env` is still
+never mounted. On a host with a firewall (ufw), allow the bridge in
+(`ufw allow in on docker0`) or the box cannot reach the forwarder.
 
 ## Channels
 
@@ -288,6 +344,40 @@ One-time setup:
 Put the three values in the agent's `.env` as `TEAMS_APP_ID`,
 `TEAMS_APP_SECRET`, `TEAMS_TENANT_ID`.
 
+### Channels as a tool
+
+When `channels.yml` binds at least one transport, `channels.send_message` is a
+tool like any MCP tool. `remuda tools` lists it, and with no bindings it is not
+there.
+
+From a workflow script it goes through `Remuda.tool` and is recorded as a
+`workflow_steps` row (`kind: "tool"`, `name: "channels.send_message"`). It
+raises when no channel delivers:
+
+```ruby
+Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.",
+                                     thread_id: nil, files: ["files/digest.pdf"])
+# => { "thread_id" => "…" }
+```
+
+Inside the sandbox Pi sees it as `channels_send_message`. The runner adds a
+`channels` server to the box's `mcp.json` that points at the per-run
+forwarder, and the forwarder answers it on the host with the agent's bound
+channels. `MATTERMOST_TOKEN` never enters the container. Each send is a step
+on the run that started the box. The agent attaches files by their in-box
+path (`/agent/files/report.pdf`). Paths outside the agent directory, `.env`,
+and `.remuda/` are refused. To have the agent answer where it was asked, put
+the `jid` and `thread_id` in the prompt:
+
+```ruby
+Remuda.agent(<<~PROMPT)
+  #{msg.sender_name} asked: #{msg.text}
+  When you are done, reply with channels_send_message to jid #{msg.jid}, thread_id #{msg.thread_id}.
+PROMPT
+```
+
+A server named `channels` in `mcp.json` takes precedence over the built-in one.
+
 Not shipped yet: a `remuda` command that supervises channels, and durable
 channel state (the cursor is in memory; pass `since:` to resume). See
 [design/06-channels.md](design/06-channels.md).
@@ -329,14 +419,27 @@ copy-pasteable crontab line that runs Remuda tick (not `.agentworks/bin/tick`):
 * * * * * cd /path/to/ops && remuda tick >> /path/to/ops/.remuda/tick.log 2>&1
 ```
 
-No daemon. Install that one line on the host crontab. Tick fires unpaused rows
-with `next_occurrence <= now` through the same Runner (`trigger: "schedule"`),
-then advances `last_occurrence` / `next_occurrence`. If that workflow still has
-a `running` row, the new run is `skipped`.
+No daemon. Install that one line on the host crontab. Tick finds unpaused rows
+with `next_occurrence <= now`, advances `last_occurrence` / `next_occurrence`
+first, then fires the workflow through the same Runner (`trigger: "schedule"`).
+A run that outlasts the minute is not seen as due again by the next tick, and
+when two ticks race for one occurrence only one wins it. If that workflow still
+has a `running` row, the new run is `skipped`.
 
 ```bash
 remuda tick           # inside the agent
 remuda tick ./ops
+```
+
+### Images
+
+Build the sandbox images from `image/` when the Dockerfiles change. They are
+not rebuilt when the gem bumps:
+
+```bash
+docker build -t remuda-pi:latest image/
+docker build -t remuda-coding:latest -f image/Dockerfile.coding image/
+ruby -Ilib test/integration/mcp_client.rb   # Pi in the image can call MCP
 ```
 
 ## Interactive Pi (sandboxed)
@@ -349,7 +452,9 @@ remuda
 
 That is `docker run --rm -it` of the image in `.remuda/image` (default
 `remuda-pi:latest`). Same sandbox `Remuda.agent` uses. The directory you ran
-from is mounted at `/agent` read-write.
+from is mounted at `/agent` read-write, except `.env` (masked, empty in the
+box) and `.remuda/` (masked, apart from `.remuda/workflows/`). Workflows are
+writable here and read-only for `Remuda.agent`.
 
 The sandbox adds `host.docker.internal` → host gateway. Set
 `REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `mcp.json` may list both a
