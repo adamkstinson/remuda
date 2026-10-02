@@ -74,7 +74,7 @@ One image, independent of the gem version. Payload is Pi plus git/ripgrep/ca-cer
 **Batch (`Remuda.agent`):**
 
 ```
-pi --mode json --print --approve --no-session
+pi --mode json --print --approve
 ```
 
 `--approve` so `/agent/.pi` and `AGENTS.md` load. Ruby parses Pi's public
@@ -164,17 +164,18 @@ Network on in v0 (the model API has to be reached until the gateway takes it).
 `--network host` is a laptop shortcut for localhost MCP and a hole; default
 bridge + explicit MCP routes is the next tightening.
 
-Batch `Remuda.agent` still passes `--no-session` unless a workflow asks for a
-session id (follow-up in the same run). The **queryable** record of that turn
-is the `workflow_steps` row, parsed from Pi’s `--mode json` stream (text, tool
-events, usage). Interactive `remuda` does not pass `--no-session`; Pi persists
-under `.pi/agent/sessions`. SQLite is not Pi’s session disk. A later index of
-JSONL into tables is optional (05).
+Batch `Remuda.agent` no longer passes `--no-session`; every run, batch or
+interactive, persists under `.pi/agent/sessions`. The **queryable** record of
+that turn is still the `workflow_steps` row, parsed from Pi’s `--mode json`
+stream (text, tool events, usage); the session file is the full transcript
+Pi already knows how to write. SQLite is not Pi’s session disk. A later index
+of JSONL into tables is optional (05).
 
 ## Interface sketch
 
 ```ruby
 result = Remuda.agent(prompt, context: { ... })
+result = Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")  # per-call override
 # → output, session_id, usage, ok, exit_code
 ```
 
