@@ -58,7 +58,11 @@ remuda new ./ops
 cd ops
 ```
 
-Or scaffold the current directory: `remuda new`. Existing files are left alone.
+Or scaffold the current directory: `remuda new`. Existing files are left alone,
+so running `remuda new` in an older agent adds only what it is missing, such as
+the `remuda` skill (`.pi/skills/remuda/SKILL.md`). That skill teaches the
+agent, in the sandbox or on the host, the CLI, how to write workflows, and the
+Ruby API on one page.
 
 That writes identity and slots, not engine code:
 
@@ -68,6 +72,7 @@ ops/
 ├── mcp.json               MCP server URLs only (no secrets)
 ├── .env.example           copy to .env (gitignored); host-only
 ├── .pi/                   this agent's Pi config / skills
+│   └── skills/remuda/     how to use Remuda: CLI, workflows, Ruby API
 ├── files/                 working files (agent memory)
 └── .remuda/
     ├── Gemfile            harness pin (not the app Gemfile)
