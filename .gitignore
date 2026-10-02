@@ -20,3 +20,4 @@ design/10-fleet-migration.md
 # Coding agent runtime (Remuda)
 .remuda/db/
 .pi/agent/
+test/dummy/.pi/agent/
