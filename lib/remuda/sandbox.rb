@@ -12,7 +12,7 @@ module Remuda
     # wait() must pass a matching read_timeout or the HTTP client drops first.
     WAIT_SECONDS = 3600
 
-    def self.run(agent_dir, prompt)
+    def self.run(agent_dir, prompt, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
       configure_wait_timeout!
 
@@ -28,7 +28,7 @@ module Remuda
         local = ChannelsMcp.routes(agent_dir, run: Current.run)
         McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
           container = Docker::Container.create(
-            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path)
+            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model)
           )
           begin
             container.start
@@ -52,15 +52,19 @@ module Remuda
       end
     end
 
-    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil)
+    # Without provider: / model:, Pi picks its own default from the agent's
+    # settings.json. Remuda does not declare a second one.
+    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil, provider: nil, model: nil)
       agent_dir = File.expand_path(agent_dir)
+      ensure_pi_agent_dir(agent_dir)
       cmd = [
         "--mode", "json",
         "--print",
-        "--approve",
-        "--no-session",
-        "@/run/remuda/prompt.txt"
+        "--approve"
       ]
+      cmd.push("--provider", provider.to_s) unless provider.to_s.empty?
+      cmd.push("--model", model.to_s) unless model.to_s.empty?
+      cmd << "@/run/remuda/prompt.txt"
       {
         "Image" => Image.for(agent_dir),
         "Entrypoint" => ["pi"],
