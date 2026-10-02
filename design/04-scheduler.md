@@ -14,6 +14,10 @@ A cron expression attached to a script name. Nothing more.
 - **Cron parsing via fugit** (proven in Agentworks).
 - **Tick fires the runner**, so scheduled runs are recorded identically to
   manual `remuda run` (see [03-workflows](./03-workflows.md)).
+- **Claim, then run.** Tick advances `next_occurrence` before it fires the
+  runner, with an update conditional on the value it read. A run longer than
+  a minute is not due again on the next tick, and of two racing ticks only one
+  wins the occurrence.
 - **Overlap:** previous run of the same workflow still `running` when the
   next is due — skip and record (`status: skipped`). Not concurrent, not queued.
 
