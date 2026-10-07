@@ -12,7 +12,7 @@ class FakeMattermost
   BOT = { "id" => "bot-id", "username" => "ops", "is_bot" => true }.freeze
 
   attr_reader :port, :posts, :typing, :uploads, :client_frames, :upgrade_headers, :requests
-  attr_accessor :token, :channel_posts
+  attr_accessor :token, :channel_posts, :channels
 
   def initialize(token: "tok")
     @token = token
@@ -26,6 +26,7 @@ class FakeMattermost
     @requests = []
     @sockets = Queue.new
     @channel_posts = {}
+    @channels = nil # [{ "id", "name", "type" }] overrides the channel_posts-derived list
     @threads = []
     @accept = Thread.new { accept_loop }
   end
@@ -124,9 +125,9 @@ class FakeMattermost
 
     case [verb, path]
     in ["GET", "/api/v4/users/me"] then reply(client, 200, BOT)
-    in ["GET", "/api/v4/users/me/teams"] then reply(client, 200, [{ "id" => "team-1" }])
+    in ["GET", "/api/v4/users/me/teams"] then reply(client, 200, [{ "id" => "team-1", "name" => "outfit" }])
     in ["GET", "/api/v4/users/me/teams/team-1/channels"]
-      reply(client, 200, @channel_posts.keys.map { |id| { "id" => id, "type" => "O" } })
+      reply(client, 200, @channels || @channel_posts.keys.map { |id| { "id" => id, "name" => id, "type" => "O" } })
     in ["GET", %r{\A/api/v4/channels/([^/]+)/posts\?since=}]
       posts = @channel_posts.fetch(path[%r{channels/([^/]+)/}, 1], [])
       reply(client, 200, { "order" => posts.map { _1["id"] }, "posts" => posts.to_h { [_1["id"], _1] } })

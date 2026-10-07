@@ -351,13 +351,30 @@ Put the three values in the agent's `.env` as `TEAMS_APP_ID`,
 
 ### Channels as a tool
 
-When `channels.yml` binds at least one transport, `channels.send_message` is a
-tool like any MCP tool. `remuda tools` lists it, and with no bindings it is not
-there.
+When `channels.yml` binds at least one transport, two tools appear alongside
+the MCP ones: `channels.list_channels` and `channels.send_message`. `remuda
+tools` lists them, and with no bindings they are not there.
 
-From a workflow script it goes through `Remuda.tool` and is recorded as a
-`workflow_steps` row (`kind: "tool"`, `name: "channels.send_message"`). It
-raises when no channel delivers:
+`list_channels` is everywhere the agent can post, as one flat list across all
+its transports — several Mattermost channels, a Teams conversation, whatever
+is bound — each with the `jid` that `send_message` takes. Nothing has to
+hard-code a channel id; the agent can look and choose.
+
+```ruby
+Remuda.tool("channels.list_channels")
+# => { "channels" => [
+#      { "jid" => "mattermost:abc", "name" => "dark-horse/ops", "transport" => "mattermost", "kind" => "channel" },
+#      { "jid" => "mattermost:def", "name" => "@adam",           "transport" => "mattermost", "kind" => "dm" },
+#      { "jid" => "teams:…",        "name" => "General",         "transport" => "teams",      "kind" => "channel" } ] }
+```
+
+`kind` is `channel`, `private`, `dm`, or `group`. Mattermost lists every
+membership on every team the bot is on. Teams has no directory a bot can
+browse, so it lists the conversations it has already heard from.
+
+From a workflow script both go through `Remuda.tool` and are recorded as
+`workflow_steps` rows (`kind: "tool"`, `name: "channels.send_message"` /
+`"channels.list_channels"`). `send_message` raises when no channel delivers:
 
 ```ruby
 Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.",
@@ -365,7 +382,8 @@ Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.
 # => { "thread_id" => "…" }
 ```
 
-Inside the sandbox Pi sees it as `channels_send_message`. The runner adds a
+Inside the sandbox Pi sees them as `channels_list_channels` and
+`channels_send_message`. The runner adds a
 `channels` server to the box's `mcp.json` that points at the per-run
 forwarder, and the forwarder answers it on the host with the agent's bound
 channels. `MATTERMOST_TOKEN` never enters the container. Each send is a step

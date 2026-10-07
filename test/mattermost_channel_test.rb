@@ -141,6 +141,23 @@ class MattermostChannelTest < Minitest::Test
     refute ch.owns_jid?("42")
   end
 
+  # Break this catches: the agent cannot find out where it is allowed to post,
+  # so a workflow has to hard-code channel ids.
+  def test_list_channels_is_every_membership_with_a_sendable_jid
+    @server.channels = [
+      { "id" => "ch-1", "name" => "ops", "type" => "O" },
+      { "id" => "ch-2", "name" => "native-stack", "type" => "P" },
+      { "id" => "ch-3", "name" => "bot-id__user-7", "type" => "D" }
+    ]
+    listed = channel.list_channels
+    assert_equal [
+      { "jid" => "mattermost:ch-1", "name" => "outfit/ops", "transport" => "mattermost", "kind" => "channel" },
+      { "jid" => "mattermost:ch-2", "name" => "outfit/native-stack", "transport" => "mattermost", "kind" => "private" },
+      { "jid" => "mattermost:ch-3", "name" => "@adam", "transport" => "mattermost", "kind" => "dm" }
+    ], listed
+    listed.each { |c| assert @channel.owns_jid?(c["jid"]) }
+  end
+
   # Break this catches: a reply that is only text when the agent has a photo
   # to send, so the person never gets the image.
   def test_send_message_attaches_local_files

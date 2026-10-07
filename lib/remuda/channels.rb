@@ -15,6 +15,9 @@ module Remuda
   #     Deliver text and optional local file paths. Returns the thread it
   #     landed in, nil if undeliverable. Without thread_id it starts a new
   #     thread and returns that thread's root.
+  #   list_channels   -> [Hash]   every place this transport can send to:
+  #     { "jid", "name", "transport", "kind" } with kind one of
+  #     channel / private / dm / group. Default is none.
   module Channels
     # A file that arrived with an inbound message, already on disk.
     Attachment = Data.define(:id, :name, :mime_type, :size, :path)
@@ -42,6 +45,10 @@ module Remuda
       def on_message(&block)
         @on_message = block
         self
+      end
+
+      def list_channels
+        []
       end
 
       private
@@ -88,6 +95,11 @@ module Remuda
 
       def send_message(jid:, text:, thread_id: nil, files: nil)
         for_jid(jid)&.send_message(jid: jid, text: text, thread_id: thread_id, files: files)
+      end
+
+      # One flat list across every bound transport.
+      def list_channels
+        flat_map(&:list_channels)
       end
 
       # Route every bound channel's inbound to one handler.
@@ -187,6 +199,24 @@ module Remuda
         { "thread_id" => thread }
       end
     end
+
+    # channels.list_channels: everywhere the agent can send, across transports.
+    module ListTool
+      NAME = "list_channels"
+      DESCRIPTION = "List every channel, DM, and group this agent can send to, across all its " \
+                    "transports. Each entry has a jid for send_message."
+      SCHEMA = { "type" => "object", "properties" => {} }.freeze
+
+      def self.catalog_entry
+        { server: "channels", name: NAME, description: DESCRIPTION, input_schema: SCHEMA }
+      end
+
+      def self.call(registry, _args = {})
+        { "channels" => registry.list_channels }
+      end
+    end
+
+    TOOLS = { SendTool::NAME => SendTool, ListTool::NAME => ListTool }.freeze
   end
 
   module Channels

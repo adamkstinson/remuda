@@ -28,8 +28,26 @@ class ChannelToolsTest < Minitest::Test
       SENT << { jid: jid, text: text, thread_id: thread_id, files: files }
       thread_id || "root-1"
     end
+
+    def list_channels
+      [{ "jid" => "rec:town", "name" => "town", "transport" => "recorder", "kind" => "channel" },
+       { "jid" => "rec:dm", "name" => "@adam", "transport" => "recorder", "kind" => "dm" }]
+    end
   end
   Remuda::Channels.register_transport("recorder", Recorder)
+
+  # A second transport, to show the list is flat across all of them.
+  class Pager < Remuda::Channels::Channel
+    def self.from_config(_config, _env) = new
+    def name = "pager"
+    def owns_jid?(jid) = jid.to_s.start_with?("pager:")
+    def send_message(jid:, text:, thread_id: nil, files: nil) = "p-1"
+
+    def list_channels
+      [{ "jid" => "pager:oncall", "name" => "oncall", "transport" => "pager", "kind" => "group" }]
+    end
+  end
+  Remuda::Channels.register_transport("pager", Pager)
 
   def setup
     Recorder::SENT.clear
@@ -73,9 +91,19 @@ class ChannelToolsTest < Minitest::Test
     end
   end
 
+  def test_remuda_tool_lists_channels_flat_across_every_transport
+    File.write(File.join(@dir, ".remuda", "channels.yml"), "transports:\n  recorder: {}\n  pager: {}\n")
+    run = start_run
+    result = Remuda::Current.set(run: run, agent_dir: @dir) { Remuda.tool("channels.list_channels") }
+
+    assert_equal %w[rec:town rec:dm pager:oncall], result["channels"].map { |c| c["jid"] }
+    assert_equal %w[recorder recorder pager], result["channels"].map { |c| c["transport"] }
+    assert_equal "channels.list_channels", Remuda::WorkflowStep.find_by(kind: "tool").name
+  end
+
   def test_tools_lists_send_message_only_when_a_transport_is_bound
     names = Remuda.tools(@dir).map { |t| "#{t[:server]}.#{t[:name]}" }
-    assert_equal ["channels.send_message"], names
+    assert_equal ["channels.send_message", "channels.list_channels"], names
     tool = Remuda.tools(@dir).first
     assert_equal %w[jid text], tool[:input_schema]["required"]
 
@@ -117,7 +145,11 @@ class ChannelToolsTest < Minitest::Test
       assert init.dig("result", "capabilities", "tools")
 
       tools = call.call("tools/list", {})
-      assert_equal ["send_message"], tools.dig("result", "tools").map { |t| t["name"] }
+      assert_equal %w[send_message list_channels], tools.dig("result", "tools").map { |t| t["name"] }
+
+      listed = call.call("tools/call", { "name" => "list_channels", "arguments" => {} })
+      refute listed.dig("result", "isError")
+      assert_equal %w[rec:town rec:dm], JSON.parse(listed.dig("result", "content", 0, "text"))["channels"].map { |c| c["jid"] }
 
       sent = call.call("tools/call", { "name" => "send_message",
                                        "arguments" => { "jid" => "rec:dm", "text" => "done",
@@ -131,6 +163,7 @@ class ChannelToolsTest < Minitest::Test
     step = Remuda::WorkflowStep.find_by(kind: "tool", name: "channels.send_message")
     refute_nil step, "the agent's send is a workflow step too"
     assert_equal run.id, step.workflow_run_id
+    refute_nil Remuda::WorkflowStep.find_by(kind: "tool", name: "channels.list_channels")
   end
 
   def test_the_agent_cannot_attach_files_outside_its_directory_or_its_env
