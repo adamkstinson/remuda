@@ -31,7 +31,8 @@ and workflows too when the session is interactive. `.env` reads as empty and
 `.remuda/` holds only `workflows/`. Running anything is the operator's job:
 write the workflow, then tell them the exact command. MCP servers from
 `mcp.json` are your tools (`plane_list_work_items`, …). When channels are
-bound, `channels_send_message` is one of them.
+bound, `channels_list_channels` (everywhere you can post, with a jid each)
+and `channels_send_message` are two of them.
 
 **On the host** (cwd is the agent directory): use the CLI below. Type
 `remuda`, not `bundle exec remuda`. The binstub finds `.remuda/Gemfile`.
@@ -130,7 +131,9 @@ to send, or `on_message { |msg| … }` with `start_all` to listen. A message
 has `jid`, `thread_id`, `sender_name`, `text`, and `files`. Reply with the
 same `jid` and `thread_id` to stay in the thread. From a workflow, prefer
 `Remuda.tool("channels.send_message", jid:, text:, thread_id:)`, which records
-a step and raises if nothing delivered.
+a step and raises if nothing delivered. `Remuda.tool("channels.list_channels")`
+returns `{ "channels" => [{ "jid", "name", "transport", "kind" }] }`, flat
+across every bound transport — do not hard-code channel ids.
 
 **`Remuda::Current`** holds `agent_dir`, `run` (the `WorkflowRun`, nil
 outside the runner), and `inputs`. Outside `remuda run` / `tick` nothing is
