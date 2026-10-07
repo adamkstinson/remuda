@@ -52,8 +52,9 @@ module Remuda
                  }
                when "ping" then {}
                when "tools/list"
-                 { tools: [{ name: Channels::SendTool::NAME, description: Channels::SendTool::DESCRIPTION,
-                             inputSchema: Channels::SendTool::SCHEMA }] }
+                 { tools: Channels::TOOLS.values.map do |tool|
+                   { name: tool::NAME, description: tool::DESCRIPTION, inputSchema: tool::SCHEMA }
+                 end }
                when "tools/call" then call_tool(params)
                else
                  return { jsonrpc: "2.0", id: id, error: { code: -32_601, message: "method not found" } }
@@ -63,15 +64,16 @@ module Remuda
 
     def call_tool(params)
       name = params["name"]
-      raise ArgumentError, "unknown tool #{name.inspect}" unless name == Channels::SendTool::NAME
+      tool = Channels::TOOLS[name]
+      raise ArgumentError, "unknown tool #{name.inspect}" unless tool
 
       args = (params["arguments"].is_a?(Hash) ? params["arguments"] : {}).dup
       args["files"] = Array(args["files"]).map { |path| host_file(path) } if args["files"]
-      output = Channels::SendTool.call(registry, args)
-      record(args, output, nil)
+      output = tool.call(registry, args)
+      record(name, args, output, nil)
       { content: [{ type: "text", text: JSON.generate(output) }] }
     rescue StandardError => e
-      record(args, nil, e.message) if args
+      record(name, args, nil, e.message) if args
       { content: [{ type: "text", text: e.message }], isError: true }
     end
 
@@ -99,7 +101,7 @@ module Remuda
       raise ArgumentError, "#{path}: no such file"
     end
 
-    def record(args, output, error)
+    def record(name, args, output, error)
       return unless @run
 
       ActiveRecord::Base.connection_pool.with_connection do
@@ -107,7 +109,7 @@ module Remuda
           workflow_run_id: @run.id,
           kind: "tool",
           position: WorkflowStep.where(workflow_run_id: @run.id).count + 1,
-          name: "#{SERVER}.#{Channels::SendTool::NAME}",
+          name: "#{SERVER}.#{name}",
           input: args,
           output: output,
           error: error

@@ -22,7 +22,7 @@ module Remuda
         }
       end
     end
-    catalog << Channels::SendTool.catalog_entry if Channels.bound?(agent_dir)
+    catalog.concat(Channels::TOOLS.values.map(&:catalog_entry)) if Channels.bound?(agent_dir)
     catalog
   end
 
@@ -32,9 +32,10 @@ module Remuda
 
     agent_dir = Current.agent_dir || Dir.pwd
     result = if server == "channels" && Channels.bound?(agent_dir)
-      raise ArgumentError, "unknown tool: #{qualified_name}" unless name == Channels::SendTool::NAME
+      tool = Channels::TOOLS[name]
+      raise ArgumentError, "unknown tool: #{qualified_name}" unless tool
 
-      Channels::SendTool.call(Remuda.channels(agent_dir), args)
+      tool.call(Remuda.channels(agent_dir), args)
     else
       spec = mcp_config(agent_dir).dig("mcpServers", server)
       call_mcp(agent_dir, server, name, args, spec)

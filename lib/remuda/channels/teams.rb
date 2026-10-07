@@ -49,6 +49,10 @@ module Remuda
           with_db { ChannelSession.find_by(channel: NAME, jid: jid)&.data }
         end
 
+        def each
+          with_db { ChannelSession.where(channel: NAME).pluck(:jid, :data) }.each { |jid, data| yield jid, data }
+        end
+
         def put(jid, reference)
           with_db do
             row = ChannelSession.find_or_initialize_by(channel: NAME, jid: jid)
@@ -73,6 +77,7 @@ module Remuda
 
         def get(jid) = @lock.synchronize { @refs[jid] }
         def put(jid, reference) = @lock.synchronize { @refs[jid] = reference }
+        def each(&block) = @lock.synchronize { @refs.dup }.each(&block)
       end
 
       def self.from_config(config, env = {}, agent_dir: nil)
@@ -210,6 +215,20 @@ module Remuda
         nil
       end
 
+      # Teams has no directory the bot can browse; it can only send where it
+      # has already been spoken to. Those are the stored references.
+      def list_channels
+        out = []
+        @references.each do |jid, reference|
+          kind = reference["conversation_type"] == "channel" ? "channel" : reference["conversation_type"].to_s
+          kind = "dm" if kind == "personal"
+          kind = "group" if kind == "groupChat"
+          out << { "jid" => jid, "name" => reference["conversation_name"] || jid,
+                   "transport" => name, "kind" => kind }
+        end
+        out
+      end
+
       private
 
       def incoming(activity)
@@ -240,6 +259,7 @@ module Remuda
           "service_url" => activity["serviceUrl"],
           "conversation_id" => base_conversation(conversation["id"]),
           "conversation_type" => conversation["conversationType"],
+          "conversation_name" => conversation["name"],
           "tenant_id" => conversation["tenantId"] || activity.dig("channelData", "tenant", "id"),
           "bot_id" => recipient["id"],
           "bot_name" => recipient["name"]

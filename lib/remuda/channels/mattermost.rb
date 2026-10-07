@@ -148,6 +148,23 @@ module Remuda
         "#{PREFIX}#{found["id"]}"
       end
 
+      # Every channel, group, and DM the bot is a member of, across its teams.
+      KINDS = { "O" => "channel", "P" => "private", "D" => "dm", "G" => "group" }.freeze
+
+      def list_channels
+        api(:get, "/users/me/teams").flat_map do |team|
+          api(:get, "/users/me/teams/#{team["id"]}/channels").map do |channel|
+            kind = KINDS.fetch(channel["type"], channel["type"].to_s)
+            name = kind == "dm" ? dm_name(channel["name"]) : "#{team["name"]}/#{channel["name"]}"
+            { "jid" => "#{PREFIX}#{channel["id"]}", "name" => name,
+              "transport" => self.name, "kind" => kind }
+          end
+        end.uniq { |c| c["jid"] }
+      rescue Error, SystemCallError, IOError, Timeout::Error => e
+        log("list_channels failed: #{e.message}")
+        []
+      end
+
       # One websocket event, as parsed JSON. Public so a caller can feed events
       # it received some other way; the listener uses it too.
       def handle_event(event)
@@ -166,6 +183,16 @@ module Remuda
       end
 
       private
+
+      # A DM channel is named "<id>__<id>"; show the other user instead.
+      def dm_name(channel_name)
+        other = channel_name.to_s.split("__").find { |id| id != me["id"] }
+        return channel_name.to_s if other.nil?
+
+        "@#{api(:get, "/users/#{other}")["username"]}"
+      rescue Error, SystemCallError, IOError, Timeout::Error
+        channel_name.to_s
+      end
 
       def deliver(message)
         if @queue
