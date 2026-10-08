@@ -479,6 +479,23 @@ from is mounted at `/agent` read-write, except `.env` (masked, empty in the
 box) and `.remuda/` (masked, apart from `.remuda/workflows/`). Workflows are
 writable here and read-only for `Remuda.agent`.
 
+### Extra mounts
+
+An agent directory holds the agent — skills, workflows, config. What it works
+on lives elsewhere and is mounted in. Declare it in `.remuda/mounts.yml`:
+
+```yaml
+core: ../../Products/core        # read-write (default)
+docs: ../../Docs:ro              # read-only
+index.yml: ../../index.yml:ro    # a single file
+```
+
+Each entry is bound at `/work/<name>`, for both `remuda` and `Remuda.agent`.
+Paths are relative to the agent directory. A path missing on the host is an
+error rather than a root-owned directory Docker made for you. `/agent` is
+still the agent's own directory; a `git commit` in `/work/core` lands in
+that repo, not the agent's.
+
 The sandbox adds `host.docker.internal` → host gateway. Set
 `REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `mcp.json` may list both a
 local `url` and a `tailscale_url`. When `REMUDA_LOCAL_HOSTNAME` matches this
