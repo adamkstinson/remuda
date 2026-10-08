@@ -215,7 +215,7 @@ module Remuda
       mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}" if File.directory?(workflows)
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
       mounts << "#{mcp_path}:/agent/mcp.json:ro" if mcp_path
-      mounts
+      mounts.concat(Mounts.for(agent_dir))
     end
     private_class_method :binds
 
