@@ -140,7 +140,9 @@ remuda tools ./ops plane.list_work_items
 One-shot **sandboxed** Pi in `remuda-pi:latest` unless the agent has
 `.remuda/image` (one line, the tag). Coding agents set that file to
 `remuda-coding:latest`. `GH_TOKEN` / `GITHUB_TOKEN` from the host `.env` is
-injected when present; `.env` is still not mounted. Result has `output`,
+injected when present, with git configured (env only) to take https credentials
+from `gh`, so `git push` to an https GitHub remote works; `.env` is still not
+mounted. Result has `output`,
 `ok`, `exit_code`, and related fields.
 
 ```ruby

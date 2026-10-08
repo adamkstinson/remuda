@@ -160,7 +160,14 @@ module Remuda
       token = vars["GH_TOKEN"] || vars["GITHUB_TOKEN"]
       return [] if token.nil? || token.empty?
 
-      ["GH_TOKEN=#{token}", "GITHUB_TOKEN=#{token}"]
+      # gh reads the token itself; git over https needs to be told to ask gh.
+      # GIT_CONFIG_* is git's env-only config, so nothing is written to disk.
+      [
+        "GH_TOKEN=#{token}", "GITHUB_TOKEN=#{token}",
+        "GIT_CONFIG_COUNT=1",
+        "GIT_CONFIG_KEY_0=credential.https://github.com.helper",
+        "GIT_CONFIG_VALUE_0=!gh auth git-credential"
+      ]
     end
     private_class_method :github_env
 

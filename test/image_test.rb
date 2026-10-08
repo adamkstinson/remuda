@@ -65,6 +65,7 @@ class ImageTest < Minitest::Test
       File.write(File.join(dir, ".env"), "GH_TOKEN=ghs_test_not_a_real_token\n")
       spec = Remuda::Sandbox.interactive_spec(dir)
       assert_includes Array(spec["Env"]), "GH_TOKEN=ghs_test_not_a_real_token"
+      assert_includes Array(spec["Env"]), "GIT_CONFIG_VALUE_0=!gh auth git-credential"
       binds = spec.dig("HostConfig", "Binds") || []
       refute binds.any? { |b| b.start_with?(File.join(dir, ".env")) }, "host .env must not be a mount source"
       assert_includes binds, "/dev/null:/agent/.env:ro", "the .env inside /agent must be masked"
