@@ -26,13 +26,13 @@ The workflow merges after approval and checks are green.
 - End every comment and pull request body you write with `<!-- coding-agent -->`. The workflow uses it to tell your writing from the maintainer’s.
 - You work alone in the session. Where a skill says to ask your human partner, comment on the pull request (or on the issue, before a pull request exists) and stop.
 - When only the maintainer can unblock you (access, a decision, a secret), comment what you need and stop. If you already asked and nothing has changed, comment `Parked: <reason>` once and stop. The workflow skips the issue until they reply.
-- Your scope is this repository and the issue in front of you. CI, branch protection, secrets, and `.remuda/` (the workflow that runs you) change only when the issue asks for it.
+- Your scope is this repository and the issue in front of you. CI, branch protection, secrets, and the workflow that runs you (in `/agent/.remuda/`) change only when the issue asks for it.
 - A defect you find outside the issue becomes a new issue, without the `agent` label.
 - Write commit messages and pull request titles in the style of `git log --oneline -20`.
 
 ## Skills
 
-Skills live in `.pi/skills/`. Load the one that matches what you are doing.
+Skills live in your agent directory, `/agent/.pi/skills/`. Load the one that matches what you are doing.
 
 | Skill | When |
 |---|---|
