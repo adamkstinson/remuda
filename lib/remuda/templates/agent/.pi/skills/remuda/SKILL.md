@@ -22,13 +22,16 @@ files/               working files and memory
   workflows/*.rb     workflow scripts; helpers in workflows/lib/
   channels.yml       channel bindings (Mattermost, Teams)
   image              optional: sandbox image tag (default remuda-pi:latest)
+  mounts.yml         optional: host paths mounted at /work/<name> (name: path[:ro])
   db/remuda.sqlite3  runs, steps, schedules (host only)
 ```
 
 **Inside the sandbox** (cwd `/agent`, as in bare `remuda` or `Remuda.agent`):
 there is no Ruby, no `remuda`, and no Docker. You can read and write files,
 and workflows too when the session is interactive. `.env` reads as empty and
-`.remuda/` holds only `workflows/`. Running anything is the operator's job:
+`.remuda/` holds only `workflows/`. Anything in `.remuda/mounts.yml` is at
+`/work/<name>` — a product repo, a client's docs, an index file. `/agent` is
+this agent; `/work/*` is what it works on, and commits there go to that repo. Running anything is the operator's job:
 write the workflow, then tell them the exact command. MCP servers from
 `mcp.json` are your tools (`plane_list_work_items`, …). When channels are
 bound, `channels_list_channels` (everywhere you can post, with a jid each)
