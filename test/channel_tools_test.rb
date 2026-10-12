@@ -111,6 +111,11 @@ class ChannelToolsTest < Minitest::Test
     assert_empty Remuda.tools(@dir)
   end
 
+  def test_send_message_description_tells_the_agent_not_to_use_it_to_answer_in_place
+    tool = Remuda.tools(@dir).find { |t| t[:name] == "send_message" }
+    assert_match(/not.*(reply|answer).*in place|only.*when.*explicitly asked/i, tool[:description])
+  end
+
   # --- the sandboxed agent ---------------------------------------------------
 
   def test_the_agents_mcp_json_gets_a_channels_server_on_the_forwarder

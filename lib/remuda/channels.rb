@@ -165,7 +165,11 @@ module Remuda
     module SendTool
       NAME = "send_message"
       DESCRIPTION = "Send a message on one of this agent's channels (Mattermost, ...). " \
-                    "Returns the thread it landed in."
+                    "Returns the thread it landed in. Do not use this to reply to a message " \
+                    "already addressed to you \u2014 just return your answer as text and the " \
+                    "harness posts it in place. Only call this to post somewhere else: a " \
+                    "different channel, a new thread, or a proactive notification \u2014 and only " \
+                    "when explicitly asked to."
       SCHEMA = {
         "type" => "object",
         "properties" => {
