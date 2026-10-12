@@ -35,7 +35,11 @@ this agent; `/work/*` is what it works on, and commits there go to that repo. Ru
 write the workflow, then tell them the exact command. MCP servers from
 `mcp.json` are your tools (`plane_list_work_items`, …). When channels are
 bound, `channels_list_channels` (everywhere you can post, with a jid each)
-and `channels_send_message` are two of them.
+and `channels_send_message` are two of them. If you were invoked to answer a
+message, just return your answer as text — the caller posts it in that
+thread. Reach for `channels_send_message` only to post somewhere else
+(a different channel, a new thread, a proactive notification), and only when
+asked to.
 
 **On the host** (cwd is the agent directory): use the CLI below. Type
 `remuda`, not `bundle exec remuda`. The binstub finds `.remuda/Gemfile`.
