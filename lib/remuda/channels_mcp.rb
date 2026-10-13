@@ -11,13 +11,14 @@ module Remuda
     SERVER = "channels"
     PROTOCOL = "2025-06-18"
 
-    def self.routes(agent_dir, run: nil)
-      Channels.bound?(agent_dir) ? { SERVER => new(agent_dir, run: run) } : {}
+    def self.routes(agent_dir, run: nil, pins: {})
+      Channels.bound?(agent_dir) ? { SERVER => new(agent_dir, run: run, pins: pins) } : {}
     end
 
-    def initialize(agent_dir, run: nil)
+    def initialize(agent_dir, run: nil, pins: {})
       @agent_dir = File.expand_path(agent_dir)
       @run = run
+      @pins = pins || {}
       @lock = Mutex.new
     end
 
@@ -53,7 +54,7 @@ module Remuda
                when "ping" then {}
                when "tools/list"
                  { tools: Channels::TOOLS.values.map do |tool|
-                   { name: tool::NAME, description: tool::DESCRIPTION, inputSchema: tool::SCHEMA }
+                   { name: tool::NAME, description: description_for(tool), inputSchema: schema_for(tool) }
                  end }
                when "tools/call" then call_tool(params)
                else
@@ -67,14 +68,43 @@ module Remuda
       tool = Channels::TOOLS[name]
       raise ArgumentError, "unknown tool #{name.inspect}" unless tool
 
-      args = (params["arguments"].is_a?(Hash) ? params["arguments"] : {}).dup
+      supplied = (params["arguments"].is_a?(Hash) ? params["arguments"] : {}).dup
+      args = supplied
+      pins = pins_for(name)
+      conflict = pins.find { |key, value| supplied.key?(key) && supplied[key] != value }
+      raise ArgumentError, "#{name}: #{conflict[0]} is fixed for this run" if conflict
+
+      args = supplied.merge(pins)
       args["files"] = Array(args["files"]).map { |path| host_file(path) } if args["files"]
       output = tool.call(registry, args)
       record(name, args, output, nil)
       { content: [{ type: "text", text: JSON.generate(output) }] }
     rescue StandardError => e
-      record(name, args, nil, e.message) if args
+      record(name, args, nil, e.message) if defined?(args) && args
       { content: [{ type: "text", text: e.message }], isError: true }
+    end
+
+    # The model never sees a pinned argument: drop it from the advertised
+    # schema, and say in the description that the host fixes it.
+    def schema_for(tool)
+      pins = pins_for(tool::NAME)
+      return tool::SCHEMA if pins.empty?
+
+      schema = JSON.parse(JSON.generate(tool::SCHEMA))
+      pins.each_key { |key| (schema["properties"] || {}).delete(key) }
+      schema["required"] = Array(schema["required"]) - pins.keys
+      schema
+    end
+
+    def description_for(tool)
+      pins = pins_for(tool::NAME)
+      return tool::DESCRIPTION if pins.empty?
+
+      "#{tool::DESCRIPTION} Fixed for this run: #{pins.keys.join(", ")}."
+    end
+
+    def pins_for(name)
+      @pins["#{SERVER}_#{name}"] || {}
     end
 
     def registry
