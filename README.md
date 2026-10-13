@@ -168,6 +168,41 @@ Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")
 Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolves the provider
 ```
 
+#### Narrowing the tools for one call
+
+By default the sandbox sees the whole catalog: every Pi built-in, every
+server in `mcp.json`, and the channels tools when a transport is bound.
+Narrow that for a single call with `tools:` (allowlist) or `exclude_tools:`
+(denylist). The two are mutually exclusive. An empty allowlist passes
+`--no-tools`.
+
+```ruby
+Remuda.agent(prompt, tools: %w[read grep channels_send_message])   # allowlist
+Remuda.agent(prompt, exclude_tools: %w[bash write edit])           # denylist
+Remuda.agent(prompt, tools: [])                                    # no tools
+```
+
+Tool names are Pi's: built-ins (`read`, `bash`, `edit`, `write`, …) and
+`<server>_<tool>` for MCP (`channels_send_message`,
+`planet_list_work_items`).
+
+The Hash form of `tools:` also pins arguments. A pinned argument is filled in
+by the host, removed from the tool's advertised schema, and refused if the
+model sends a different value. Pins are only valid for tools Remuda answers
+on the host — today the `channels` server. Pinning a forwarded MCP server
+(Planet, Twenty, …) raises before the container starts.
+
+```ruby
+# The agent may read, but it can only reply in the thread this run came from.
+Remuda.agent(prompt, tools: {
+  "read" => true,
+  "channels_send_message" => { jid: msg.jid, thread_id: msg.thread_id }
+})
+```
+
+The `agent` step's `input` records `tools` / `exclude_tools` as given, pins
+included.
+
 The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
 `PI_MODEL` are not a fallback for it.
 
