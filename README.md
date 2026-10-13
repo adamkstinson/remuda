@@ -171,6 +171,18 @@ Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolve
 The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
 `PI_MODEL` are not a fallback for it.
 
+`session_id:` resumes an existing Pi session, creating it if it is missing
+(`pi --session-id`). Pass the `session_id` a previous run returned to
+continue that conversation with its prior turns in context. Session files
+live under `.pi/agent/sessions/`, so they survive restarts. The step's
+`session_id` column records what Pi reports, which for a resumed run is the
+id you passed.
+
+```ruby
+first = Remuda.agent("Start the incident log for INC-42.")
+Remuda.agent("Add the on-call rotation to it.", session_id: first.session_id)
+```
+
 Put credentials in `<agent>/.pi/agent/auth.json` (login inside `remuda`), or
 synthesize them from the agent `.env` (`PI_PROVIDER` plus that provider’s API
 key — which key to write, not which model to run).
@@ -263,13 +275,33 @@ channels.on_message do |msg|
   end
   prompt = msg.text.to_s
   prompt += "\n\nAttached files:\n" + listed.map { |p| "- #{p}" }.join("\n") if listed.any?
-  result = Remuda.agent("Reply to #{msg.sender_name}: #{prompt}")
+  result = Remuda.agent("Reply to #{msg.sender_name}: #{prompt}", session_id: channels.session_for(msg))
   outbound = Dir.glob("files/outbound/*")
   channels.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id, files: outbound)
 end
 channels.start_all
 sleep
 ```
+
+Passing `session_id: channels.session_for(msg)` makes every message in a
+thread one growing Pi session, so a follow-up like "yes, do that" resumes
+with the conversation so far. The mapping is the `channel_threads` table:
+one row per `(jid, thread_id)`, minted (a UUID) on first sight and touched on
+every message. A DM is a thread too, and a top-level mention that starts a
+new thread starts a new session.
+
+When a workflow posts a new thread, bind it to the session that wrote it so
+later replies resume that session:
+
+```ruby
+result = Remuda.agent("Write the morning brief for the ops channel.")
+thread = Remuda.tool("channels.send_message", jid: ops_jid, text: result.output)["thread_id"]
+Remuda.channels.bind_thread(jid: ops_jid, thread_id: thread, session_id: result.session_id)
+```
+
+`bind_thread` upserts, so an explicit binding overwrites an earlier one.
+Nothing is bound automatically: the run that posts the root only knows its
+own `session_id` after it returns.
 
 A message carries `jid` (where to reply: `mattermost:<channel_id>`),
 `thread_id` (the root post; reply with it to stay in the thread),
@@ -315,7 +347,7 @@ Rack server. TLS in front of it (Caddy, …) is yours:
 require "remuda"
 teams = Remuda.channels(__dir__)[:teams]
 teams.on_message do |msg|
-  result = Remuda.agent("Reply to #{msg.sender_name}: #{msg.text}")
+  result = Remuda.agent("Reply to #{msg.sender_name}: #{msg.text}", session_id: teams.session_for(msg))
   teams.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id)
 end
 teams.start!

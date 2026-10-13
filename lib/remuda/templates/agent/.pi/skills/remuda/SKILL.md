@@ -118,10 +118,13 @@ error, and retries HTTP 429 up to five times. Inside a run it records a step
 
 **`Remuda.tools(dir)`** returns `[{server:, name:, description:, input_schema:}, …]`.
 
-**`Remuda.agent(prompt, provider: nil, model: nil)`** runs Pi once in the
-sandbox, with this directory at `/agent`. It returns `output` (the assistant's
-final text), `ok`, `exit_code`, `session_id`, `usage`, and `image`. It does
-**not** raise: check `ok`. Inside a run it records a step (`kind: "agent"`).
+**`Remuda.agent(prompt, provider: nil, model: nil, session_id: nil)`** runs
+Pi once in the sandbox, with this directory at `/agent`. It returns `output`
+(the assistant's final text), `ok`, `exit_code`, `session_id`, `usage`, and
+`image`. It does **not** raise: check `ok`. Inside a run it records a step
+(`kind: "agent"`). `session_id:` resumes an existing Pi session (creating it
+if missing); pass the `session_id` a previous run returned to continue the
+conversation with context. Session files live in `.pi/agent/sessions/`.
 
 - The agent cannot see the script, `.env`, or the database. Put everything it
   needs in the prompt, or in `files/`, and name the paths (`/agent/files/x.md`).
@@ -136,7 +139,11 @@ final text), `ok`, `exit_code`, `session_id`, `usage`, and `image`. It does
 `.remuda/channels.yml`. Use `send_message(jid:, text:, thread_id: nil, files: nil)`
 to send, or `on_message { |msg| … }` with `start_all` to listen. A message
 has `jid`, `thread_id`, `sender_name`, `text`, and `files`. Reply with the
-same `jid` and `thread_id` to stay in the thread. From a workflow, prefer
+same `jid` and `thread_id` to stay in the thread. Pass
+`session_id: channels.session_for(msg)` to `Remuda.agent` so every message in
+a thread resumes one Pi session; `bind_thread(jid:, thread_id:, session_id:)`
+attaches an already-existing session (the run that posted a thread root) to a
+thread. From a workflow, prefer
 `Remuda.tool("channels.send_message", jid:, text:, thread_id:)`, which records
 a step and raises if nothing delivered. `Remuda.tool("channels.list_channels")`
 returns `{ "channels" => [{ "jid", "name", "transport", "kind" }] }`, flat
