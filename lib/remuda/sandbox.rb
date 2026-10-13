@@ -12,8 +12,9 @@ module Remuda
     # wait() must pass a matching read_timeout or the HTTP client drops first.
     WAIT_SECONDS = 3600
 
-    def self.run(agent_dir, prompt, provider: nil, model: nil)
+    def self.run(agent_dir, prompt, provider: nil, model: nil, tools: nil, exclude_tools: nil, policy: nil)
       agent_dir = File.expand_path(agent_dir)
+      policy = policy_for(agent_dir, policy || ToolPolicy.new(tools: tools, exclude_tools: exclude_tools))
       configure_wait_timeout!
 
       Dir.mktmpdir("remuda-sandbox") do |tmpdir|
@@ -25,10 +26,11 @@ module Remuda
 
         wait = nil
         text = ""
-        local = ChannelsMcp.routes(agent_dir, run: Current.run)
+        local = ChannelsMcp.routes(agent_dir, run: Current.run, pins: policy.pins)
         McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
           container = Docker::Container.create(
-            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model)
+            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model,
+                                  policy: policy)
           )
           begin
             container.start
@@ -54,9 +56,10 @@ module Remuda
 
     # Without provider: / model:, Pi picks its own default from the agent's
     # settings.json. Remuda does not declare a second one.
-    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil, provider: nil, model: nil)
+    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil, provider: nil, model: nil, tools: nil, exclude_tools: nil, policy: nil)
       agent_dir = File.expand_path(agent_dir)
       ensure_pi_agent_dir(agent_dir)
+      policy ||= ToolPolicy.new(tools: tools, exclude_tools: exclude_tools)
       cmd = [
         "--mode", "json",
         "--print",
@@ -64,6 +67,7 @@ module Remuda
       ]
       cmd.push("--provider", provider.to_s) unless provider.to_s.empty?
       cmd.push("--model", model.to_s) unless model.to_s.empty?
+      cmd.concat(policy.pi_args)
       cmd << "@/run/remuda/prompt.txt"
       {
         "Image" => Image.for(agent_dir),
@@ -211,6 +215,14 @@ module Remuda
       dir
     end
     private_class_method :ensure_pi_agent_dir
+
+    # The policy is built and validated before the container starts. A pin on
+    # a tool this host does not answer is an ArgumentError, not a no-op.
+    def self.policy_for(agent_dir, policy)
+      servers = Channels.bound?(agent_dir) ? [ChannelsMcp::SERVER] : []
+      policy.validate!(local_servers: servers)
+    end
+    private_class_method :policy_for
 
     # Only mask what exists: Docker creates a missing mount target, and in a
     # bind-mounted directory that is a root-owned file on the host.

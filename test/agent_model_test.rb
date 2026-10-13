@@ -54,7 +54,9 @@ class AgentModelTest < Minitest::Test
       end
     end
 
-    assert_equal({ provider: "anthropic", model: "claude-sonnet-4-5" }, seen)
+    assert_equal "anthropic", seen[:provider]
+    assert_equal "claude-sonnet-4-5", seen[:model]
+    assert_instance_of Remuda::ToolPolicy, seen[:policy]
     input = Remuda::WorkflowStep.find_by(kind: "agent").input
     assert_equal "anthropic", input["provider"]
     assert_equal "claude-sonnet-4-5", input["model"]
@@ -72,7 +74,9 @@ class AgentModelTest < Minitest::Test
       Remuda::Current.set(run: run, agent_dir: @dir) { Remuda.agent("hi") }
     end
 
-    assert_equal({ provider: nil, model: nil }, seen)
+    assert_nil seen[:model]
+    assert_nil seen[:provider]
+    assert_instance_of Remuda::ToolPolicy, seen[:policy]
 
     assert_equal({ "prompt" => "hi" }, Remuda::WorkflowStep.find_by(kind: "agent").input)
   end
