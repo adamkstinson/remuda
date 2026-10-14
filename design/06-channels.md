@@ -55,7 +55,7 @@ Transports in the gem, bindings in the agent.
   is in the tool catalog. `Remuda.tool("channels.send_message", jid:, text:,
   thread_id:, files:)` sends through the registry and records a step like an
   MCP call. The sandboxed agent gets the same tool as `channels_send_message`:
-  the runner adds a `channels` entry to the box's `mcp.json` pointing at the
+  the runner adds a `channels` entry to the box's `.mcp.json` pointing at the
   per-run forwarder, which answers it in-process on the host
   (`Remuda::ChannelsMcp`). The token stays in `.env`, the send is a step on
   the run, and attachments resolve from `/agent/...` to the agent directory

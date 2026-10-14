@@ -6,7 +6,7 @@ require "open3"
 require "tmpdir"
 
 # The image ships Remuda's Pi profile: a `pi` first on PATH that loads the
-# MCP client and points it at the agent's mcp.json.
+# MCP client and points it at the agent's .mcp.json.
 class PiProfileTest < Minitest::Test
   ROOT = File.expand_path("..", __dir__)
   SHIM = File.join(ROOT, "image/pi-profile/pi")
@@ -24,7 +24,7 @@ class PiProfileTest < Minitest::Test
   def test_profile_loads_the_client_and_reads_only_the_agents_mcp_json
     with_shim(mcp_json: true) do |run|
       out = run.call("--mode", "json", "--print")
-      assert_equal "-e /adapter --mcp-config AGENT/mcp.json --mode json --print", out[:args]
+      assert_equal "-e /adapter --mcp-config AGENT/.mcp.json --mode json --print", out[:args]
       assert_equal "exclusive", out[:mode]
     end
   end
@@ -52,7 +52,7 @@ class PiProfileTest < Minitest::Test
     Dir.mktmpdir("pi-profile") do |dir|
       agent = File.join(dir, "agent")
       FileUtils.mkdir_p(agent)
-      File.write(File.join(agent, "mcp.json"), "{}") if mcp_json
+      File.write(File.join(agent, ".mcp.json"), "{}") if mcp_json
       fake = File.join(dir, "fake-pi")
       File.write(fake, "#!/bin/sh\necho \"$*\"\necho \"${PI_MCP_CONFIG_MODE:-}\"\n")
       File.chmod(0o755, fake)

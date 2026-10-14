@@ -27,7 +27,7 @@ class ScaffoldTest < Minitest::Test
 
   # Break this catches: dummy root missing the files Pi and the operator look at.
   def test_dummy_root_has_agent_facing_files
-    assert File.file?(File.join(DUMMY, "mcp.json")), "dummy needs mcp.json"
+    assert File.file?(File.join(DUMMY, ".mcp.json")), "dummy needs .mcp.json"
     assert File.file?(File.join(DUMMY, ".remuda/Gemfile")), "dummy needs .remuda/Gemfile"
     gemfile = File.read(File.join(DUMMY, ".remuda/Gemfile"))
     assert_match(/\bgem\s+["']remuda["']/, gemfile)

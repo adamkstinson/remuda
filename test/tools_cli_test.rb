@@ -11,7 +11,7 @@ class ToolsCliTest < Minitest::Test
   ROOT = File.expand_path("..", __dir__)
   DUMMY = File.join(ROOT, "test/dummy")
   EXE = File.join(ROOT, "exe/remuda")
-  MCP = File.join(DUMMY, "mcp.json")
+  MCP = File.join(DUMMY, ".mcp.json")
   ENV_FILE = File.join(DUMMY, ".env")
 
   def setup
@@ -70,14 +70,14 @@ class ToolsCliTest < Minitest::Test
     assert_includes output, "\"text\""
   end
 
-  # Break this catches: remuda tools ignores mcp.json headers (so the server never sees the interpolated key).
+  # Break this catches: remuda tools ignores .mcp.json headers (so the server never sees the interpolated key).
   def test_remuda_tools_sends_interpolated_mcp_headers
     File.write(ENV_FILE, "PLANE_API_KEY=from-env-key\n")
     File.write(MCP, JSON.generate(
       "mcpServers" => {
         "stub" => {
           "url" => "http://127.0.0.1:#{@stub[:port]}",
-          "headers" => { "X-Plane-Key" => "{{PLANE_API_KEY}}" }
+          "headers" => { "X-Plane-Key" => "${PLANE_API_KEY}" }
         }
       }
     ))

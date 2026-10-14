@@ -9,7 +9,7 @@ There is no engine, no step graph, no resume. Ruby is the control flow.
 - **Plain Ruby in `.remuda/workflows/`.** Agentworks began with YAML, drifted
   into a DSL, and ended up running `.rb` scripts anyway. Remuda skips to the
   end. The scripts are yours; they live under the harness folder so the agent
-  root stays identity (`AGENTS.md`, `mcp.json`, `.pi/`, `Gemfile`, `files/`).
+  root stays identity (`AGENTS.md`, `.mcp.json`, `.pi/`, `Gemfile`, `files/`).
 - **No workflow class.** The script is not `class Triage < Remuda::Workflow`.
   The runner `load`s `.remuda/workflows/<name>.rb` after `chdir` to the agent
   root, so `files/` and `require_relative "lib/foo"` from the script (i.e.
@@ -22,7 +22,7 @@ There is no engine, no step graph, no resume. Ruby is the control flow.
   - `Remuda.tool("server.method", **args)` — deterministic MCP call on the
     **host**, operator credentials, structured result (Ruby hash). Split on
     the first dot: server `plane`, tool `list_work_items`. Resolve URL from
-    `mcp.json`; auth from host `.env` (self-hosted MCP) or later the gateway
+    `.mcp.json`; auth from host `.env` (self-hosted MCP) or later the gateway
     tuple. JSON-RPC `tools/call`. Raise on error so the run fails.
   - `Remuda.agent(prompt, ...)` — one **sandboxed** Pi invocation (see
     [02-runner](./02-runner.md)). Result is boring: `output`, `session_id`,

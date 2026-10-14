@@ -67,7 +67,7 @@ remuda/
 **Not in the agent directory:** anything under `lib/`, `migrate/`, `image/`.
 
 **In the agent directory** (written by `remuda new`; skip any path that
-already exists): at root — `AGENTS.md`, `mcp.json`, `.pi/`, `Gemfile` /
+already exists): at root — `AGENTS.md`, `.mcp.json`, `.pi/`, `Gemfile` /
 `Gemfile.lock`, `.env` / `.env.example`, `files/`. Under `.remuda/` —
 `db/remuda.sqlite3`, `workflows/`, `channels.yml`, `bin/` binstubs.
 

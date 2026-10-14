@@ -33,7 +33,7 @@ agent, and nothing that runs agents in general.
 ```
 my-agent/
 ├── AGENTS.md                 ← identity (Pi reads this). Always this name.
-├── mcp.json                  ← MCP servers this agent uses
+├── .mcp.json                  ← MCP servers this agent uses
 ├── .pi/                      ← project Pi: skills, extensions; user dir at .pi/agent/
 ├── .env                      ← secrets slots (gitignored)
 ├── files/                    ← the agent's working files / memory
@@ -45,7 +45,7 @@ my-agent/
     └── bin/                  ← binstubs only (remuda, run, tick)
 ```
 
-**Root** — what you or Pi look at: `AGENTS.md`, `mcp.json`, `.pi/`, `.env`, `files/`.
+**Root** — what you or Pi look at: `AGENTS.md`, `.mcp.json`, `.pi/`, `.env`, `files/`.
 
 **`.pi/agent/`** — this agent’s Pi user folder (`PI_CODING_AGENT_DIR`). Same
 shape as `~/.pi/agent` (`auth.json`, `sessions/`, `models-store.json`,
