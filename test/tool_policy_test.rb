@@ -100,6 +100,29 @@ class ToolPolicyTest < Minitest::Test
     assert_equal ["--tools", "read,grep"], cmd[cmd.index("--tools"), 2]
   end
 
+  # #40 and #41 both extend batch_spec; a resumed session keeps its tool limits.
+  def test_batch_spec_passes_a_session_id_and_an_allowlist_together
+    uuid = "0b19325a-1111-4222-8333-444455556666"
+    cmd = Remuda::Sandbox.batch_spec(@dir, prompt_path: @prompt, session_id: uuid, tools: %w[read])["Cmd"]
+    assert_equal ["--session-id", uuid], cmd[cmd.index("--session-id"), 2]
+    assert_equal ["--tools", "read"], cmd[cmd.index("--tools"), 2]
+    assert_equal "@/run/remuda/prompt.txt", cmd.last
+  end
+
+  def test_agent_forwards_session_id_and_policy_together
+    seen = nil
+    fake = lambda do |_dir, _prompt, **kwargs|
+      seen = kwargs
+      Remuda::AgentResult.new(output: "ok", ok: true, exit_code: 0, image: "remuda-pi:latest")
+    end
+    uuid = "0b19325a-1111-4222-8333-444455556666"
+    with_sandbox_run(fake) do
+      Remuda::Current.set(agent_dir: @dir) { Remuda.agent("hi", session_id: uuid, exclude_tools: %w[bash]) }
+    end
+    assert_equal uuid, seen[:session_id]
+    assert_equal ["--exclude-tools", "bash"], seen[:policy].pi_args
+  end
+
   def test_batch_spec_accepts_a_denylist_directly
     cmd = Remuda::Sandbox.batch_spec(@dir, prompt_path: @prompt, exclude_tools: %w[bash write])["Cmd"]
     assert_equal ["--exclude-tools", "bash,write"], cmd[cmd.index("--exclude-tools"), 2]

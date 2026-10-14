@@ -65,7 +65,7 @@ class ChannelToolsTest < Minitest::Test
     FileUtils.mkdir_p(File.join(@dir, "files"))
     File.write(File.join(@dir, ".remuda", "channels.yml"), "transports:\n  recorder: {}\n")
     File.write(File.join(@dir, ".env"), "MATTERMOST_TOKEN=bot-secret\n")
-    File.write(File.join(@dir, "mcp.json"), JSON.generate("mcpServers" => {}))
+    File.write(File.join(@dir, ".mcp.json"), JSON.generate("mcpServers" => {}))
     File.write(File.join(@dir, "files", "report.txt"), "hi")
   end
 
@@ -136,7 +136,7 @@ class ChannelToolsTest < Minitest::Test
   end
 
   def test_an_agent_without_mcp_json_still_gets_channels
-    File.delete(File.join(@dir, "mcp.json"))
+    File.delete(File.join(@dir, ".mcp.json"))
     Dir.mktmpdir do |tmp|
       Remuda::McpForwarder.open(@dir, tmp, local: Remuda::ChannelsMcp.routes(@dir)) do |path, _forwarder|
         assert_equal ["channels"], JSON.parse(File.read(path))["mcpServers"].keys

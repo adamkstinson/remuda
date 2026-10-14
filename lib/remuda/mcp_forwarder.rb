@@ -10,7 +10,7 @@ module Remuda
   # Per-run HTTP reverse proxy that lets the sandbox call MCP servers whose
   # credentials live on the host.
   #
-  # The host mcp.json is the declaration. For each server that declares
+  # The host .mcp.json is the declaration. For each server that declares
   # headers, the agent's copy points at this forwarder instead of the real
   # URL and carries no headers; the forwarder adds the declared headers,
   # filled from the agent .env then the process env, on the way out. A server
@@ -18,7 +18,7 @@ module Remuda
   # headers, and bodies through and streams both ways. It does not speak MCP.
   #
   # Every path starts with a random per-run token, so a request from anything
-  # but the container that got this run's mcp.json is a 404.
+  # but the container that got this run's .mcp.json is a 404.
   class McpForwarder
     CONTAINER_HOST = "host.docker.internal"
     UPSTREAM_TIMEOUT = 3600
@@ -26,7 +26,7 @@ module Remuda
       connection keep-alive proxy-authenticate proxy-authorization proxy-connection
       te trailer transfer-encoding upgrade host content-length
     ].freeze
-    PLACEHOLDER = /\{\{(\w+)\}\}/
+    PLACEHOLDER = Mcp::PLACEHOLDER
 
     # A route forwards to upstream with headers, or, with a handler, is
     # answered in-process (handler.call(method, body) -> [status, headers, body]).
@@ -36,13 +36,13 @@ module Remuda
       end
     end
 
-    # Rewrite the agent's mcp.json for this run and serve it until the block
-    # returns. Yields the path of the secret-free copy (nil without mcp.json
+    # Rewrite the agent's .mcp.json for this run and serve it until the block
+    # returns. Yields the path of the secret-free copy (nil without .mcp.json
     # or local servers) and the running forwarder (nil when no server needs
     # one). local: adds host-side servers ({ "channels" => handler }) that
     # exist only for the box; a server the agent declares by that name wins.
     def self.open(agent_dir, tmpdir, local: {})
-      host_file = File.join(File.expand_path(agent_dir), "mcp.json")
+      host_file = File.join(File.expand_path(agent_dir), Mcp::CONFIG)
       return yield(nil, nil) if !File.file?(host_file) && local.empty?
 
       config = File.file?(host_file) ? JSON.parse(File.read(host_file)) : { "mcpServers" => {} }
@@ -57,7 +57,7 @@ module Remuda
         )
         add_local(agent_config, routes, local, "http://#{CONTAINER_HOST}:#{forwarder.port}/#{token}")
         forwarder.routes = routes
-        path = File.join(tmpdir, "mcp.json")
+        path = File.join(tmpdir, Mcp::CONFIG)
         File.write(path, JSON.pretty_generate(agent_config))
         File.chmod(0o644, path)
         yield path, (routes.empty? ? nil : forwarder)
@@ -76,7 +76,7 @@ module Remuda
     end
     private_class_method :add_local
 
-    # Pure: the agent's copy of mcp.json and the forwarder's route table.
+    # Pure: the agent's copy of .mcp.json and the forwarder's route table.
     def self.plan(config, vars:, base_url:, env: ENV)
       config = config.is_a?(Hash) ? config : {}
       routes = {}

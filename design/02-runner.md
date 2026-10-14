@@ -25,8 +25,9 @@ the host. Two doors share one container definition:
   its own `.pi/` on top. Framework config vs app config. Today the profile is
   `image/pi-profile/pi`, first on `PATH` in both images: it loads the MCP
   client (`pi-mcp-adapter`, pinned in the Dockerfiles) and points it, in
-  exclusive mode, at `/agent/mcp.json`. That file is the one declaration; the
-  box reads no `.mcp.json` or `.pi/mcp.json`.
+  exclusive mode, at `/agent/.mcp.json`. The agent has one MCP config,
+  `.mcp.json`, pi's own project file: `pi` on the host, `Remuda.tool`, and
+  the box all read it. In the box the per-run copy is mounted over it.
 - **Interactive and unattended share one sandbox posture.** Same image, same
   uid, same credential set, same HostConfig builder. `Remuda.agent` runs Pi
   with a prompt and exits; bare `remuda` allocates a TTY. Working on an agent
@@ -46,8 +47,8 @@ the host. Two doors share one container definition:
   directory's identity, `.pi/`, skills, and `files/` go in; host MCP tokens
   do not. Do not source the agent's `.env` inside the image (agent-box did;
   we don't).
-- **`mcp.json` is in the box, rewritten per run.** The runner mounts a
-  secret-free copy over `/agent/mcp.json`; servers that declare `headers`
+- **`.mcp.json` is in the box, rewritten per run.** The runner mounts a
+  secret-free copy over `/agent/.mcp.json`; servers that declare `headers`
   point at a per-run host forwarder that adds them (see
   [08-secrets](./08-secrets.md)). The host file is never rewritten.
 - **No `--host` flag.** Unsandboxed Pi is `pi` in the directory yourself.
@@ -126,7 +127,7 @@ The agent directory is not one writable “brain.”
 | `.remuda/workflows/` | `/agent/.remuda/workflows` | **ro** | rw |
 | prompt file | `/run/remuda/prompt.txt` | ro | — |
 | remuda Pi profile (`image/pi-profile/`) | in the image | ro | ro |
-| `mcp.json` (per-run rewrite, see 08) | `/agent/mcp.json` | ro, secret-free | ro, secret-free |
+| `.mcp.json` (per-run rewrite, see 08) | `/agent/.mcp.json` | ro, secret-free | ro, secret-free |
 | `.remuda/db/` | **not mounted** | | |
 | `.remuda/` as a whole | **not mounted** | | |
 | `.env` | **not mounted** | | |
@@ -158,7 +159,7 @@ host path `<agent>/.pi/agent/`. That is this agent’s `auth.json`, `sessions/`,
 already uses; not a Remuda reimplementation; not the operator’s
 `~/.pi/agent`. `.env` is still never mounted; if the agent has API keys only
 in `.env`, the runner may synthesize a tmp `auth.json` into that folder or a
-staging dir (08). MCP tokens stay in `.env` + `mcp.json`; channel tokens stay
+staging dir (08). MCP tokens stay in `.env` + `.mcp.json`; channel tokens stay
 in `.env` + `.remuda/channels.yml`.
 
 Launcher also sets invocation env (`AGENT_PROMPT_FILE`, `AGENT_MODEL`,

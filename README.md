@@ -69,7 +69,7 @@ That writes identity and slots, not engine code:
 ```
 ops/
 ├── AGENTS.md              identity
-├── mcp.json               MCP server URLs only (no secrets)
+├── .mcp.json               MCP server URLs only (no secrets)
 ├── .env.example           copy to .env (gitignored); host-only
 ├── .pi/                   this agent's Pi config / skills
 │   └── skills/remuda/     how to use Remuda: CLI, workflows, Ruby API
@@ -109,7 +109,7 @@ ambient when the Runner is in play.
 ### `Remuda.tool("server.method", **args)`
 
 Host-side MCP call. Split on the first dot: server `plane`, tool
-`list_work_items`. URL comes from `mcp.json`; token from the agent's `.env`
+`list_work_items`. URL comes from `.mcp.json`; token from the agent's `.env`
 (`PLANE_MCP_TOKEN` or `MCP_TOKEN`). Raises on error.
 
 ```json
@@ -126,7 +126,7 @@ items = Remuda.tool("plane.list_work_items", project_id: "…", state_group: "ba
 items.each { |item| warn item.inspect }
 ```
 
-`mcp.json` `headers` are sent on the call (`{{VAR}}` from the agent's `.env`).
+`.mcp.json` `headers` are sent on the call (`${VAR}` from the agent's `.env`).
 See the catalog while writing a workflow:
 
 ```bash
@@ -171,7 +171,7 @@ Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolve
 #### Narrowing the tools for one call
 
 By default the sandbox sees the whole catalog: every Pi built-in, every
-server in `mcp.json`, and the channels tools when a transport is bound.
+server in `.mcp.json`, and the channels tools when a transport is bound.
 Narrow that for a single call with `tools:` (allowlist) or `exclude_tools:`
 (denylist). The two are mutually exclusive. An empty allowlist passes
 `--no-tools`.
@@ -207,6 +207,18 @@ included.
 The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
 `PI_MODEL` are not a fallback for it.
 
+`session_id:` resumes an existing Pi session, creating it if it is missing
+(`pi --session-id`). Pass the `session_id` a previous run returned to
+continue that conversation with its prior turns in context. Session files
+live under `.pi/agent/sessions/`, so they survive restarts. The step's
+`session_id` column records what Pi reports, which for a resumed run is the
+id you passed.
+
+```ruby
+first = Remuda.agent("Start the incident log for INC-42.")
+Remuda.agent("Add the on-call rotation to it.", session_id: first.session_id)
+```
+
 Put credentials in `<agent>/.pi/agent/auth.json` (login inside `remuda`), or
 synthesize them from the agent `.env` (`PI_PROVIDER` plus that provider’s API
 key — which key to write, not which model to run).
@@ -224,10 +236,11 @@ there; the file is never mounted into the sandbox.
 
 The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
 ([pi-mcp-adapter](https://www.npmjs.com/package/pi-mcp-adapter), pinned in
-`image/Dockerfile`) and points it at `/agent/mcp.json` and nothing else. A
-directory declares its servers in its root `mcp.json`, the same file
-`Remuda.tool` reads. Not `.pi/mcp.json` and not `.mcp.json`, which the box
-ignores. Client options sit next to the URL:
+`image/Dockerfile`) and points it at `/agent/.mcp.json` and nothing else. A
+directory declares its servers in its root `.mcp.json`: pi's own project
+config, so `pi` on the host, `Remuda.tool`, and the box all read the same
+file. Header values use pi's `${VAR}` syntax; the value lives in `.env`.
+Client options sit next to the URL:
 
 ```json
 {
@@ -235,7 +248,7 @@ ignores. Client options sit next to the URL:
   "mcpServers": {
     "plane": {
       "url": "https://plane.example.com/mcp",
-      "headers": { "X-Plane-Key": "{{PLANE_API_KEY}}" },
+      "headers": { "X-Plane-Key": "${PLANE_API_KEY}" },
       "directTools": true
     }
   }
@@ -246,13 +259,13 @@ With `directTools: true` Pi sees `plane_list_projects` and the rest as its
 own tools. Without it Pi reaches them through one `mcp` proxy tool.
 
 The sandbox reaches MCP servers that declare `headers` through a per-run
-forwarder on the host. `mcp.json` stays the declaration and is not changed on
+forwarder on the host. `.mcp.json` stays the declaration and is not changed on
 disk. For each run Remuda writes a copy and mounts it read-only over
-`/agent/mcp.json`:
+`/agent/.mcp.json`:
 
 - a server with `headers` points at
   `http://host.docker.internal:<port>/<run token>/<server>` and carries no
-  headers. The forwarder fills the declared headers (`{{VAR}}` from the agent
+  headers. The forwarder fills the declared headers (`${VAR}` from the agent
   `.env`, then the process environment, the same rule as `Remuda.tool`) and
   passes the request, streaming, to the real URL.
 - a server with no `headers` keeps its URL; the agent calls it directly.
@@ -263,7 +276,7 @@ A token the workflow sets on the process before `Remuda.agent` (for example a
 refreshed `GMAIL_MCP_TOKEN`) reaches the forwarder the same way. The forwarder
 starts with the container and stops when it exits, for `Remuda.agent` and for
 interactive `remuda`. It listens on the Docker bridge address, and every path
-starts with a random token only that run's `mcp.json` holds. `.env` is still
+starts with a random token only that run's `.mcp.json` holds. `.env` is still
 never mounted. On a host with a firewall (ufw), allow the bridge in
 (`ufw allow in on docker0`) or the box cannot reach the forwarder.
 
@@ -299,13 +312,33 @@ channels.on_message do |msg|
   end
   prompt = msg.text.to_s
   prompt += "\n\nAttached files:\n" + listed.map { |p| "- #{p}" }.join("\n") if listed.any?
-  result = Remuda.agent("Reply to #{msg.sender_name}: #{prompt}")
+  result = Remuda.agent("Reply to #{msg.sender_name}: #{prompt}", session_id: channels.session_for(msg))
   outbound = Dir.glob("files/outbound/*")
   channels.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id, files: outbound)
 end
 channels.start_all
 sleep
 ```
+
+Passing `session_id: channels.session_for(msg)` makes every message in a
+thread one growing Pi session, so a follow-up like "yes, do that" resumes
+with the conversation so far. The mapping is the `channel_threads` table:
+one row per `(jid, thread_id)`, minted (a UUID) on first sight and touched on
+every message. A DM is a thread too, and a top-level mention that starts a
+new thread starts a new session.
+
+When a workflow posts a new thread, bind it to the session that wrote it so
+later replies resume that session:
+
+```ruby
+result = Remuda.agent("Write the morning brief for the ops channel.")
+thread = Remuda.tool("channels.send_message", jid: ops_jid, text: result.output)["thread_id"]
+Remuda.channels.bind_thread(jid: ops_jid, thread_id: thread, session_id: result.session_id)
+```
+
+`bind_thread` upserts, so an explicit binding overwrites an earlier one.
+Nothing is bound automatically: the run that posts the root only knows its
+own `session_id` after it returns.
 
 A message carries `jid` (where to reply: `mattermost:<channel_id>`),
 `thread_id` (the root post; reply with it to stay in the thread),
@@ -351,7 +384,7 @@ Rack server. TLS in front of it (Caddy, …) is yours:
 require "remuda"
 teams = Remuda.channels(__dir__)[:teams]
 teams.on_message do |msg|
-  result = Remuda.agent("Reply to #{msg.sender_name}: #{msg.text}")
+  result = Remuda.agent("Reply to #{msg.sender_name}: #{msg.text}", session_id: teams.session_for(msg))
   teams.send_message(jid: msg.jid, text: result.output, thread_id: msg.thread_id)
 end
 teams.start!
@@ -449,7 +482,7 @@ Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.
 
 Inside the sandbox Pi sees them as `channels_list_channels`,
 `channels_send_message`, and `channels_read_thread`. The runner adds a
-`channels` server to the box's `mcp.json` that points at the per-run
+`channels` server to the box's `.mcp.json` that points at the per-run
 forwarder, and the forwarder answers it on the host with the agent's bound
 channels. `MATTERMOST_TOKEN` never enters the container. Each send and read is
 a step on the run that started the box. The agent attaches files by their in-box
@@ -472,7 +505,7 @@ PROMPT
 })
 ```
 
-A server named `channels` in `mcp.json` takes precedence over the built-in one.
+A server named `channels` in `.mcp.json` takes precedence over the built-in one.
 
 Not shipped yet: a `remuda` command that supervises channels, and durable
 channel state (the cursor is in memory; pass `since:` to resume). See
@@ -570,7 +603,7 @@ still the agent's own directory; a `git commit` in `/work/core` lands in
 that repo, not the agent's.
 
 The sandbox adds `host.docker.internal` → host gateway. Set
-`REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `mcp.json` may list both a
+`REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `.mcp.json` may list both a
 local `url` and a `tailscale_url`. When `REMUDA_LOCAL_HOSTNAME` matches this
 machine, Remuda uses `url`; otherwise `tailscale_url`. Host-side
 `Remuda.tool` rewrites `host.docker.internal` to `127.0.0.1`.
@@ -590,7 +623,7 @@ writes to the agent’s `.pi/agent/` on the host and survives the container.
 | `remuda schedule [PATH] WORKFLOW --cron EXPR` | Insert/replace a schedules row; print crontab line |
 | `remuda unschedule [PATH] WORKFLOW` | Delete that workflow's schedules row |
 | `remuda schedules [PATH]` | List schedules and the crontab line |
-| `remuda tools [PATH] [NAME]` | List MCP tool names from `mcp.json`, or print one tool |
+| `remuda tools [PATH] [NAME]` | List MCP tool names from `.mcp.json`, or print one tool |
 | `remuda console [PATH]` | IRB on this agent's SQLite |
 | `remuda` | Sandboxed Pi (must already be in an agent directory) |
 | `remuda version` | Gem version |

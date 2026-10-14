@@ -17,18 +17,18 @@ class McpForwarderTest < Minitest::Test
     "mcpServers" => {
       "plane" => {
         "url" => "https://work.example.com/mcp",
-        "headers" => { "X-Plane-Key" => "{{PLANE_API_KEY}}" },
+        "headers" => { "X-Plane-Key" => "${PLANE_API_KEY}" },
         "directTools" => true
       },
       "gmail" => {
         "url" => "https://gmailmcp.example.com/mcp/v1",
-        "headers" => { "Authorization" => "Bearer {{GMAIL_MCP_TOKEN}}" }
+        "headers" => { "Authorization" => "Bearer ${GMAIL_MCP_TOKEN}" }
       },
       "docs" => { "url" => "https://docs.example.com/mcp" },
       "empty" => { "url" => "https://empty.example.com/mcp", "headers" => {} },
       "broken" => {
         "url" => "https://broken.example.com/mcp",
-        "headers" => { "X-Key" => "{{NOT_SET_ANYWHERE}}" }
+        "headers" => { "X-Key" => "${NOT_SET_ANYWHERE}" }
       },
       "local" => { "command" => "node", "args" => ["server.js"] }
     }
@@ -90,7 +90,7 @@ class McpForwarderTest < Minitest::Test
     json = JSON.generate(config)
     refute_includes json, "plane-secret"
     refute_includes json, "gmail-secret"
-    refute_includes json, "{{"
+    refute_includes json, "${"
     refute_includes json, "work.example.com"
   end
 
@@ -185,19 +185,19 @@ class McpForwarderTest < Minitest::Test
 
   def test_open_mounts_a_secret_free_copy_and_leaves_the_host_file_alone
     with_agent do |dir|
-      host_before = File.read(File.join(dir, "mcp.json"))
+      host_before = File.read(File.join(dir, ".mcp.json"))
       port = nil
       Dir.mktmpdir do |tmp|
         Remuda::McpForwarder.open(dir, tmp) do |path, forwarder|
           port = forwarder.port
           mounted = File.read(path)
           refute_includes mounted, "plane-secret"
-          refute_includes mounted, "{{"
+          refute_includes mounted, "${"
           assert_match %r{\Ahttp://host\.docker\.internal:#{port}/[0-9a-f]{32}/plane\z},
                        JSON.parse(mounted).dig("mcpServers", "plane", "url")
         end
       end
-      assert_equal host_before, File.read(File.join(dir, "mcp.json"))
+      assert_equal host_before, File.read(File.join(dir, ".mcp.json"))
       assert_raises(Errno::ECONNREFUSED) { TCPSocket.new("127.0.0.1", port) }
     end
   end
@@ -228,18 +228,18 @@ class McpForwarderTest < Minitest::Test
   def test_batch_and_interactive_mount_the_rewritten_file_read_only
     Dir.mktmpdir do |tmp|
       prompt = File.join(tmp, "prompt.txt")
-      mcp = File.join(tmp, "mcp.json")
+      mcp = File.join(tmp, ".mcp.json")
       File.write(prompt, "hi")
       File.write(mcp, "{}")
       dummy = File.expand_path("dummy", __dir__)
 
       batch = Remuda::Sandbox.batch_spec(dummy, prompt_path: prompt, mcp_path: mcp)
-      assert_includes batch.dig("HostConfig", "Binds"), "#{mcp}:/agent/mcp.json:ro"
+      assert_includes batch.dig("HostConfig", "Binds"), "#{mcp}:/agent/.mcp.json:ro"
 
       interactive = Remuda::Sandbox.interactive_spec(dummy, mcp_path: mcp)
-      assert_includes interactive.dig("HostConfig", "Binds"), "#{mcp}:/agent/mcp.json:ro"
+      assert_includes interactive.dig("HostConfig", "Binds"), "#{mcp}:/agent/.mcp.json:ro"
       args = Remuda::Sandbox.attach_args(dummy, mcp_path: mcp)
-      assert args.each_cons(2).any? { |a, b| a == "-v" && b == "#{mcp}:/agent/mcp.json:ro" }, args.inspect
+      assert args.each_cons(2).any? { |a, b| a == "-v" && b == "#{mcp}:/agent/.mcp.json:ro" }, args.inspect
     end
   end
 
@@ -254,9 +254,9 @@ class McpForwarderTest < Minitest::Test
     Dir.mktmpdir("remuda-agent") do |dir|
       FileUtils.mkdir_p(File.join(dir, ".remuda"))
       File.write(File.join(dir, ".env"), "PLANE_API_KEY=plane-secret\n")
-      File.write(File.join(dir, "mcp.json"), JSON.pretty_generate(
+      File.write(File.join(dir, ".mcp.json"), JSON.pretty_generate(
         "mcpServers" => {
-          "plane" => { "url" => "https://work.example.com/mcp", "headers" => { "X-Plane-Key" => "{{PLANE_API_KEY}}" } }
+          "plane" => { "url" => "https://work.example.com/mcp", "headers" => { "X-Plane-Key" => "${PLANE_API_KEY}" } }
         }
       ))
       yield dir

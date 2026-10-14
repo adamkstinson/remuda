@@ -11,7 +11,7 @@ class ToolStepTest < Minitest::Test
   DUMMY = File.join(ROOT, "test/dummy")
   DB = File.join(DUMMY, ".remuda/db/remuda.sqlite3")
   SCRIPT = File.join(DUMMY, ".remuda/workflows/call_tool.rb")
-  MCP = File.join(DUMMY, "mcp.json")
+  MCP = File.join(DUMMY, ".mcp.json")
 
   def setup
     disconnect_db

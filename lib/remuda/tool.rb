@@ -4,7 +4,7 @@ require "json"
 
 module Remuda
   def self.tools(agent_dir)
-    config = File.file?(File.join(agent_dir, "mcp.json")) ? mcp_config(agent_dir) : {}
+    config = File.file?(File.join(agent_dir, Mcp::CONFIG)) ? mcp_config(agent_dir) : {}
     catalog = (config["mcpServers"] || {}).flat_map do |server, spec|
       url = spec.is_a?(Hash) ? spec["url"] : nil
       next [] if url.nil? || url.empty?
@@ -88,14 +88,14 @@ module Remuda
   end
 
   def self.mcp_config(agent_dir)
-    path = File.join(agent_dir, "mcp.json")
+    path = File.join(agent_dir, Mcp::CONFIG)
     JSON.parse(File.read(path))
   end
 
   def self.mcp_url(agent_dir, server)
     spec = mcp_config(agent_dir).dig("mcpServers", server)
     url = Mcp.resolve_url(spec)
-    raise "unknown MCP server #{server.inspect} (no url in mcp.json)" if url.nil? || url.empty?
+    raise "unknown MCP server #{server.inspect} (no url in #{Mcp::CONFIG})" if url.nil? || url.empty?
 
     url
   end
@@ -117,7 +117,7 @@ module Remuda
   end
 
   def self.interpolate(value, vars)
-    value.gsub(/\{\{(\w+)\}\}/) { vars[$1] || ENV[$1] || "" }
+    value.gsub(Mcp::PLACEHOLDER) { vars[$1] || ENV[$1] || "" }
   end
 
   def self.env_token(agent_dir, server)
