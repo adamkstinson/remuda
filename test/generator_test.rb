@@ -19,7 +19,7 @@ class GeneratorTest < Minitest::Test
       gemfile = File.read(File.join(dir, ".remuda/Gemfile"))
       assert_match(/\bgem\s+["']remuda["']/, gemfile)
       refute File.exist?(File.join(dir, "Gemfile")), "harness Gemfile lives under .remuda/"
-      assert File.file?(File.join(dir, "mcp.json"))
+      assert File.file?(File.join(dir, ".mcp.json"))
       assert File.file?(File.join(dir, ".env.example"))
       assert File.directory?(File.join(dir, ".pi"))
       assert File.directory?(File.join(dir, "files"))

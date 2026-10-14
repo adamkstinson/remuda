@@ -69,7 +69,7 @@ That writes identity and slots, not engine code:
 ```
 ops/
 ├── AGENTS.md              identity
-├── mcp.json               MCP server URLs only (no secrets)
+├── .mcp.json               MCP server URLs only (no secrets)
 ├── .env.example           copy to .env (gitignored); host-only
 ├── .pi/                   this agent's Pi config / skills
 │   └── skills/remuda/     how to use Remuda: CLI, workflows, Ruby API
@@ -109,7 +109,7 @@ ambient when the Runner is in play.
 ### `Remuda.tool("server.method", **args)`
 
 Host-side MCP call. Split on the first dot: server `plane`, tool
-`list_work_items`. URL comes from `mcp.json`; token from the agent's `.env`
+`list_work_items`. URL comes from `.mcp.json`; token from the agent's `.env`
 (`PLANE_MCP_TOKEN` or `MCP_TOKEN`). Raises on error.
 
 ```json
@@ -126,7 +126,7 @@ items = Remuda.tool("plane.list_work_items", project_id: "…", state_group: "ba
 items.each { |item| warn item.inspect }
 ```
 
-`mcp.json` `headers` are sent on the call (`{{VAR}}` from the agent's `.env`).
+`.mcp.json` `headers` are sent on the call (`${VAR}` from the agent's `.env`).
 See the catalog while writing a workflow:
 
 ```bash
@@ -188,10 +188,11 @@ there; the file is never mounted into the sandbox.
 
 The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
 ([pi-mcp-adapter](https://www.npmjs.com/package/pi-mcp-adapter), pinned in
-`image/Dockerfile`) and points it at `/agent/mcp.json` and nothing else. A
-directory declares its servers in its root `mcp.json`, the same file
-`Remuda.tool` reads. Not `.pi/mcp.json` and not `.mcp.json`, which the box
-ignores. Client options sit next to the URL:
+`image/Dockerfile`) and points it at `/agent/.mcp.json` and nothing else. A
+directory declares its servers in its root `.mcp.json`: pi's own project
+config, so `pi` on the host, `Remuda.tool`, and the box all read the same
+file. Header values use pi's `${VAR}` syntax; the value lives in `.env`.
+Client options sit next to the URL:
 
 ```json
 {
@@ -199,7 +200,7 @@ ignores. Client options sit next to the URL:
   "mcpServers": {
     "plane": {
       "url": "https://plane.example.com/mcp",
-      "headers": { "X-Plane-Key": "{{PLANE_API_KEY}}" },
+      "headers": { "X-Plane-Key": "${PLANE_API_KEY}" },
       "directTools": true
     }
   }
@@ -210,13 +211,13 @@ With `directTools: true` Pi sees `plane_list_projects` and the rest as its
 own tools. Without it Pi reaches them through one `mcp` proxy tool.
 
 The sandbox reaches MCP servers that declare `headers` through a per-run
-forwarder on the host. `mcp.json` stays the declaration and is not changed on
+forwarder on the host. `.mcp.json` stays the declaration and is not changed on
 disk. For each run Remuda writes a copy and mounts it read-only over
-`/agent/mcp.json`:
+`/agent/.mcp.json`:
 
 - a server with `headers` points at
   `http://host.docker.internal:<port>/<run token>/<server>` and carries no
-  headers. The forwarder fills the declared headers (`{{VAR}}` from the agent
+  headers. The forwarder fills the declared headers (`${VAR}` from the agent
   `.env`, then the process environment, the same rule as `Remuda.tool`) and
   passes the request, streaming, to the real URL.
 - a server with no `headers` keeps its URL; the agent calls it directly.
@@ -227,7 +228,7 @@ A token the workflow sets on the process before `Remuda.agent` (for example a
 refreshed `GMAIL_MCP_TOKEN`) reaches the forwarder the same way. The forwarder
 starts with the container and stops when it exits, for `Remuda.agent` and for
 interactive `remuda`. It listens on the Docker bridge address, and every path
-starts with a random token only that run's `mcp.json` holds. `.env` is still
+starts with a random token only that run's `.mcp.json` holds. `.env` is still
 never mounted. On a host with a firewall (ufw), allow the bridge in
 (`ufw allow in on docker0`) or the box cannot reach the forwarder.
 
@@ -386,7 +387,7 @@ Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.
 
 Inside the sandbox Pi sees them as `channels_list_channels` and
 `channels_send_message`. The runner adds a
-`channels` server to the box's `mcp.json` that points at the per-run
+`channels` server to the box's `.mcp.json` that points at the per-run
 forwarder, and the forwarder answers it on the host with the agent's bound
 channels. `MATTERMOST_TOKEN` never enters the container. Each send is a step
 on the run that started the box. The agent attaches files by their in-box
@@ -401,7 +402,7 @@ Remuda.agent(<<~PROMPT)
 PROMPT
 ```
 
-A server named `channels` in `mcp.json` takes precedence over the built-in one.
+A server named `channels` in `.mcp.json` takes precedence over the built-in one.
 
 Not shipped yet: a `remuda` command that supervises channels, and durable
 channel state (the cursor is in memory; pass `since:` to resume). See
@@ -499,7 +500,7 @@ still the agent's own directory; a `git commit` in `/work/core` lands in
 that repo, not the agent's.
 
 The sandbox adds `host.docker.internal` → host gateway. Set
-`REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `mcp.json` may list both a
+`REMUDA_EXTRA_HOSTS=hostname:ip[,...]` for more. `.mcp.json` may list both a
 local `url` and a `tailscale_url`. When `REMUDA_LOCAL_HOSTNAME` matches this
 machine, Remuda uses `url`; otherwise `tailscale_url`. Host-side
 `Remuda.tool` rewrites `host.docker.internal` to `127.0.0.1`.
@@ -519,7 +520,7 @@ writes to the agent’s `.pi/agent/` on the host and survives the container.
 | `remuda schedule [PATH] WORKFLOW --cron EXPR` | Insert/replace a schedules row; print crontab line |
 | `remuda unschedule [PATH] WORKFLOW` | Delete that workflow's schedules row |
 | `remuda schedules [PATH]` | List schedules and the crontab line |
-| `remuda tools [PATH] [NAME]` | List MCP tool names from `mcp.json`, or print one tool |
+| `remuda tools [PATH] [NAME]` | List MCP tool names from `.mcp.json`, or print one tool |
 | `remuda console [PATH]` | IRB on this agent's SQLite |
 | `remuda` | Sandboxed Pi (must already be in an agent directory) |
 | `remuda version` | Gem version |

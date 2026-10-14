@@ -50,7 +50,7 @@ the container. It does not mount the file.
 Name-only identity is impersonation: every container on the box shares the
 path to the proxy, so the token must be scoped to one agent.
 
-`mcp.json` is `{name, url}` only. Nothing in `Remuda.tool`, `Remuda.agent`, or
+`.mcp.json` is `{name, url}` only. Nothing in `Remuda.tool`, `Remuda.agent`, or
 the CLI talks to a vendor API. Nothing else in Remuda may learn the gateway's
 product name.
 
@@ -61,17 +61,17 @@ responsibility — the directory cannot edit its own sandbox. Ship this wiring
 as if *all* sandbox HTTPS will go through the gateway, even if v0 still
 reaches the model API directly.
 
-**Header-declared MCP (laptop path).** A server whose `mcp.json` entry
+**Header-declared MCP (laptop path).** A server whose `.mcp.json` entry
 declares `headers` is reached through a per-run forwarder on the host
-(`Remuda::McpForwarder`). The runner rewrites the agent's copy of `mcp.json`
+(`Remuda::McpForwarder`). The runner rewrites the agent's copy of `.mcp.json`
 to point that server at the forwarder with no headers, mounts the copy over
-`/agent/mcp.json`, and the forwarder adds the declared headers (filled from
+`/agent/.mcp.json`, and the forwarder adds the declared headers (filled from
 `.env`, then the process env) on the way to the real URL. It is a streaming
 reverse proxy, not an MCP client, and lives only as long as the container.
 Each run's paths start with a random token, so another container on the host
 cannot use it. A missing variable fails closed (`401`, never a blank
 credential). This is not the TLS-intercept gateway below; it is the small
-answer for URLs we are allowed to rewrite. The host `mcp.json` is unchanged
+answer for URLs we are allowed to rewrite. The host `.mcp.json` is unchanged
 and host `Remuda.tool` still calls the real URL.
 
 **Self-hosted MCP** is the same shape without a proxy: the MCP server holds
@@ -98,7 +98,7 @@ Pi-only makes this one credential class instead of one per coding agent.
 `PI_CODING_AGENT_DIR=/agent/.pi/agent` (host `<agent>/.pi/agent/`). That folder
 is this agent’s Pi user dir: `auth.json`, `models-store.json` (catalog/pricing),
 `sessions/`, `settings.json`. Same files Pi already uses. Not a copy of
-`~/.pi/agent`. Not MCP (that is `.env` + `mcp.json`) and not channel tokens
+`~/.pi/agent`. Not MCP (that is `.env` + `.mcp.json`) and not channel tokens
 (`.env` + `.remuda/channels.yml`). Alternatively the runner reads `PI_PROVIDER` and that provider's API key from
 the agent `.env` on the host and writes `auth.json` into that folder (which
 key to stage, not which model to run). `Remuda.agent` passes `--provider` /
@@ -153,7 +153,7 @@ checks) is fleet/runbook territory. Remuda only aims the box at the tuple.
 - Per-agent gateway token (name-only is impersonation). CA trust and in-process
   proxy wiring in the image. Ship that wiring as if all sandbox HTTPS will go
   through the gateway.
-- Secret-free `mcp.json`. Self-hosted MCP is the same shape for services we own.
+- Secret-free `.mcp.json`. Self-hosted MCP is the same shape for services we own.
 - Third-party SaaS tokens never live in the agent directory.
 - OAuth is human-performed, vault-stored, auto-refreshed. Agents cannot
   self-authorize.

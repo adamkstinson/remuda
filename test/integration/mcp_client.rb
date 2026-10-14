@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # End-to-end check that Pi in the sandbox image has an MCP client, reads the
-# agent's mcp.json, and calls a header-declared server through the forwarder
+# agent's .mcp.json, and calls a header-declared server through the forwarder
 # without the key entering the box. Needs Docker and the image built from
 # image/. Not part of `rake test`.
 #
@@ -108,9 +108,9 @@ end
 Remuda::Channels.register_transport("recorder", Recorder)
 File.write("#{dir}/.remuda/image", "#{IMAGE}\n")
 File.write("#{dir}/.env", "PLANE_API_KEY=sekrit\n")
-File.write("#{dir}/mcp.json", JSON.pretty_generate(
+File.write("#{dir}/.mcp.json", JSON.pretty_generate(
   "settings" => { "toolPrefix" => "server" },
-  "mcpServers" => { "plane" => { "url" => "http://127.0.0.1:#{plane.addr[1]}/mcp", "headers" => { "X-Plane-Key" => "{{PLANE_API_KEY}}" }, "directTools" => true } }))
+  "mcpServers" => { "plane" => { "url" => "http://127.0.0.1:#{plane.addr[1]}/mcp", "headers" => { "X-Plane-Key" => "${PLANE_API_KEY}" }, "directTools" => true } }))
 File.write("#{dir}/.pi/agent/models.json", JSON.pretty_generate(
   "providers" => { "fake" => { "baseUrl" => "http://#{MODEL_HOST}:#{model.addr[1]}/v1", "api" => "openai-completions", "apiKey" => "x",
     "compat" => { "supportsDeveloperRole" => false, "supportsReasoningEffort" => false },

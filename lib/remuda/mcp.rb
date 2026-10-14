@@ -7,6 +7,12 @@ require "uri"
 
 module Remuda
   module Mcp
+    # The agent's MCP config: pi's own project file, so pi on the host and
+    # Remuda read the same one. Header values use pi's ${VAR} syntax, filled
+    # from the agent .env, then the process env.
+    CONFIG = ".mcp.json"
+    PLACEHOLDER = /\$\{(\w+)\}/
+
     def self.call(url, tool_name, arguments, token: nil, headers: {})
       rpc(url, "tools/call", { name: tool_name, arguments: arguments }, token: token, headers: headers)
     end

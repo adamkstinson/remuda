@@ -13,7 +13,7 @@ Docker. Nothing from the gem is copied into the directory.
 
 ```
 AGENTS.md            identity. Always this name, never CLAUDE.md
-mcp.json             MCP servers: URLs plus {{VAR}} header placeholders, no secrets
+.mcp.json            MCP servers: URLs plus ${VAR} header placeholders, no secrets
 .env                 secrets (host only, never in the sandbox, never commit)
 .pi/                 Pi config and skills; .pi/agent/ is this agent's Pi user dir
 files/               working files and memory
@@ -33,7 +33,7 @@ and workflows too when the session is interactive. `.env` reads as empty and
 `/work/<name>` — a product repo, a client's docs, an index file. `/agent` is
 this agent; `/work/*` is what it works on, and commits there go to that repo. Running anything is the operator's job:
 write the workflow, then tell them the exact command. MCP servers from
-`mcp.json` are your tools (`plane_list_work_items`, …). When channels are
+`.mcp.json` are your tools (`plane_list_work_items`, …). When channels are
 bound, `channels_list_channels` (everywhere you can post, with a jid each)
 and `channels_send_message` are two of them. If you were invoked to answer a
 message, just return your answer as text — the caller posts it in that
@@ -51,7 +51,7 @@ asked to.
 ```bash
 remuda new [PATH]                          # scaffold; never overwrites existing files
 remuda run [PATH] WORKFLOW                 # run .remuda/workflows/WORKFLOW.rb once, recorded
-remuda tools [PATH]                        # list server.tool names from mcp.json (+ channels)
+remuda tools [PATH]                        # list server.tool names from .mcp.json (+ channels)
 remuda tools [PATH] NAME                   # one tool's description and input schema
 remuda schedule [PATH] WORKFLOW --cron "0 7 * * *" [--timezone America/Los_Angeles]
 remuda schedules [PATH]                    # list schedules plus the crontab line to install
@@ -109,8 +109,8 @@ Then `remuda run triage`, and look at the result in `remuda console`.
 ## Ruby API
 
 **`Remuda.tool("server.tool", **args)`** is an MCP call on the host with the
-operator's credentials. The server comes from `mcp.json`. Header
-`{{VAR}}`s fill from `.env`, then `ENV`. `SERVER_MCP_TOKEN` / `MCP_TOKEN` in
+operator's credentials. The server comes from `.mcp.json`. Header
+`${VAR}`s fill from `.env`, then `ENV`. `SERVER_MCP_TOKEN` / `MCP_TOKEN` in
 `.env` becomes a bearer token. It returns the tool's JSON parsed into a
 **string-keyed** Hash or Array (`item["id"]`, not `item[:id]`). It raises on
 error, and retries HTTP 429 up to five times. Inside a run it records a step
@@ -162,7 +162,7 @@ Pi's full transcripts are in `.pi/agent/sessions/`.
 
 ## Rules
 
-- Secrets go in `.env` only. `mcp.json` uses `{{VAR}}`, never the value.
+- Secrets go in `.env` only. `.mcp.json` uses `${VAR}`, never the value.
 - Ruby helpers go in `.remuda/workflows/lib/`, never `app/` or `lib/` at the
   root. Agent memory goes in `files/`. Never copy gem code into the directory.
 - Do not add database tables. Harness state is rows; agent memory is files.
