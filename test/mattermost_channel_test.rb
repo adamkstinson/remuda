@@ -277,7 +277,140 @@ class MattermostChannelTest < Minitest::Test
     assert_equal "p1", next_message.thread_id
   end
 
+  # Break this catches: an agent entering a thread for the first time only
+  # seeing the triggering post, with no way to read what came before.
+  def test_read_thread_returns_the_root_and_a_newest_window_oldest_first
+    @server.add_thread("root", [thread_post("root", "topic", at: 1_000),
+                                 thread_post("r1", "one", at: 1_001),
+                                 thread_post("r2", "two", at: 1_002),
+                                 thread_post("r3", "three", at: 1_003)])
+    result = channel.read_thread(jid: "mattermost:ch-9", thread_id: "root")
+
+    assert_equal "root", result["root"]["id"]
+    assert_equal "topic", result["root"]["text"]
+    assert_equal %w[r1 r2 r3], result["posts"].map { |post| post["id"] }
+    assert_equal 0, result["omitted"]
+    assert_nil result["before"]
+    post = result["posts"].first
+    assert_equal "adam", post["sender_name"]
+    assert_equal "1970-01-01T00:00:01Z", post["created_at"]
+  end
+
+  def test_read_thread_windows_and_pages_a_long_thread
+    replies = (1..199).map { |i| thread_post("r#{i}", "p#{i}", at: 1_000 + i) }
+    @server.add_thread("root", [thread_post("root", "topic", at: 999)] + replies)
+
+    ch = channel
+    first = ch.read_thread(jid: "mattermost:ch-9", thread_id: "root")
+    assert_equal 20, first["posts"].size
+    assert_equal 179, first["omitted"]
+    assert_equal "r180", first["before"]
+    assert_equal (180..199).map { |i| "r#{i}" }, first["posts"].map { |post| post["id"] }
+
+    seen = first["posts"].map { |post| post["id"] }
+    before = first["before"]
+    until before.nil?
+      page = ch.read_thread(jid: "mattermost:ch-9", thread_id: "root", before: before)
+      seen.concat(page["posts"].map { |post| post["id"] })
+      before = page["before"]
+    end
+    assert_equal 199, seen.size
+    assert_equal replies.map { |post| post["id"] }.sort, seen.sort
+    assert_equal seen.size, seen.uniq.size
+  end
+
+  def test_read_thread_pages_a_paginated_server
+    replies = (1..199).map { |i| thread_post("r#{i}", "p#{i}", at: 1_000 + i) }
+    @server.add_thread("root", [thread_post("root", "topic", at: 999)] + replies)
+    @server.paginate_threads = true
+    ch = channel
+
+    seen = []
+    before = nil
+    100.times do
+      page = ch.read_thread(jid: "mattermost:ch-9", thread_id: "root", before: before)
+      seen.concat(page["posts"].map { |post| post["id"] })
+      before = page["before"]
+      break if before.nil?
+    end
+    assert_nil before, "paging must terminate"
+    assert_equal replies.map { |post| post["id"] }.sort, seen.sort
+    assert_equal seen.size, seen.uniq.size
+  end
+
+  def test_read_thread_clamps_limit
+    @server.add_thread("root", [thread_post("root", "topic", at: 999)] +
+                               (1..60).map { |i| thread_post("r#{i}", "p#{i}", at: 1_000 + i) })
+    ch = channel
+
+    assert_equal 50, ch.read_thread(jid: "mattermost:ch-9", thread_id: "root", limit: 500)["posts"].size
+    assert_equal 5, ch.read_thread(jid: "mattermost:ch-9", thread_id: "root", limit: 5)["posts"].size
+  end
+
+  def test_read_thread_marks_bot_posts_and_lists_file_names_without_downloading
+    @server.add_thread("root", [
+      thread_post("root", "topic", at: 1_000),
+      thread_post("r1", "i am the bot", at: 1_001, user_id: "bot-id"),
+      thread_post("r2", "another bot", at: 1_002, props: { "from_bot" => "true" }),
+      thread_post("r3", "a person", at: 1_003,
+                  files: [{ "id" => "f1", "name" => "cat.jpg", "mime_type" => "image/jpeg", "size" => 8 }])
+    ])
+    result = channel.read_thread(jid: "mattermost:ch-9", thread_id: "root")
+    posts = result["posts"].to_h { |post| [post["id"], post] }
+
+    assert posts["r1"]["from_bot"]
+    assert posts["r2"]["from_bot"]
+    refute posts["r3"]["from_bot"]
+    assert_equal ["cat.jpg"], posts["r3"]["files"]
+    refute @server.requests.any? { |_, path| path.include?("/files/f1") }, "the file must not be downloaded"
+  end
+
+  def test_read_thread_truncates_a_long_post
+    @server.add_thread("root", [thread_post("root", "topic", at: 1_000),
+                                thread_post("r1", "x" * 10_000, at: 1_001)])
+    post = channel.read_thread(jid: "mattermost:ch-9", thread_id: "root")["posts"].first
+
+    assert_equal 4_000 + "\u2026 (truncated)".length, post["text"].length
+    assert post["text"].end_with?("\u2026 (truncated)")
+  end
+
+  def test_read_thread_drops_the_oldest_posts_when_the_tree_would_exceed_16k
+    posts = [thread_post("root", "topic", at: 999)]
+    posts += (1..40).map { |i| thread_post("r#{i}", "x" * 1_000, at: 1_000 + i) }
+    @server.add_thread("root", posts)
+    result = channel.read_thread(jid: "mattermost:ch-9", thread_id: "root")
+
+    total = result["root"]["text"].length + result["posts"].sum { |post| post["text"].length }
+    assert_operator total, :<=, 16_000
+    assert_operator result["omitted"], :>=, 25
+    assert result["posts"].size < 20
+  end
+
+  def test_read_thread_skips_system_and_deleted_posts
+    @server.add_thread("root", [
+      thread_post("root", "topic", at: 1_000),
+      thread_post("r1", "joined", at: 1_001, type: "system_join_channel"),
+      thread_post("r2", "gone", at: 1_002).merge("delete_at" => 5),
+      thread_post("r3", "real", at: 1_003)
+    ])
+    assert_equal ["r3"], channel.read_thread(jid: "mattermost:ch-9", thread_id: "root")["posts"].map { |post| post["id"] }
+  end
+
+  def test_read_thread_failure_is_nil_not_a_crash
+    @server.token = "other"
+    assert_nil channel.read_thread(jid: "mattermost:ch-9", thread_id: "root")
+    assert_match(/read_thread root/, @log.string)
+  end
+
+  def test_read_thread_for_an_unknown_jid_is_nil
+    assert_nil channel.read_thread(jid: "telegram:42", thread_id: "root")
+  end
+
   private
+
+  def thread_post(id, message, at:, **opts)
+    FakeMattermost.post_hash(id: id, message: message, create_at: at, **opts)
+  end
 
   def drain
     out = []
