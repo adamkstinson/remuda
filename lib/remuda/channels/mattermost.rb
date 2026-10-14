@@ -5,6 +5,7 @@ require "json"
 require "net/http"
 require "securerandom"
 require "set"
+require "time"
 require "tmpdir"
 require "uri"
 
@@ -32,6 +33,10 @@ module Remuda
       NAME = "mattermost"
       PREFIX = "mattermost:"
       SEEN_LIMIT = 1000
+      DEFAULT_LIMIT = 20
+      MAX_LIMIT = 50
+      TEXT_LIMIT = 4_000
+      TOTAL_TEXT_LIMIT = 16_000
 
       class Error < StandardError; end
 
@@ -163,6 +168,45 @@ module Remuda
       rescue Error, SystemCallError, IOError, Timeout::Error => e
         log("list_channels failed: #{e.message}")
         []
+      end
+
+      # One bounded window of a thread: the root, the newest posts
+      # oldest-first, how many older posts were left out, and a cursor for the
+      # next-older page. nil when the thread cannot be read.
+      def read_thread(jid:, thread_id:, limit: 20, before: nil)
+        return nil unless channel_id_for(jid)
+
+        limit = normalize_limit(limit)
+        data = read_thread_page(thread_id, limit, before)
+        return nil unless data.is_a?(Hash)
+
+        posts = data["posts"].is_a?(Hash) ? data["posts"] : {}
+        order = Array(data["order"])
+        order = posts.keys if order.empty?
+        candidates = order.filter_map { |id| posts[id] }
+                          .reject { |post| thread_post_skip?(post, thread_id) }
+                          .sort_by { |post| [post["create_at"].to_i, post["id"].to_s] }
+
+        if before && (boundary = posts[before])
+          candidates = candidates.select { |post| post["create_at"].to_i < boundary["create_at"].to_i }
+        end
+
+        window = candidates.last(limit)
+        omitted = candidates.size - window.size
+        has_more = data["has_next"] == true || omitted.positive?
+        oldest = window.first && window.first["id"]
+
+        root = posts[thread_id] || fetch_post(thread_id)
+        result = {
+          "root" => read_thread_post(root, thread_id),
+          "posts" => window.map { |post| read_thread_post(post, thread_id) },
+          "omitted" => omitted,
+          "before" => has_more ? oldest : nil
+        }
+        cap_thread_text(result)
+      rescue Error, SystemCallError, IOError, Timeout::Error => e
+        log("read_thread #{thread_id} on #{jid} failed: #{e.message}")
+        nil
       end
 
       # One websocket event, as parsed JSON. Public so a caller can feed events
@@ -355,6 +399,75 @@ module Remuda
         return true if mentions.include?(me["id"])
 
         text.match?(/(?<![\w@])@#{Regexp.escape(me["username"].to_s)}(?![\w-])/i)
+      end
+
+      # --- read_thread -------------------------------------------------------
+
+      def normalize_limit(limit)
+        value = limit.to_i
+        value = DEFAULT_LIMIT if value <= 0
+        value.clamp(1, MAX_LIMIT)
+      end
+
+      def read_thread_page(thread_id, limit, before)
+        params = { perPage: limit + 1, direction: "up" }
+        params[:fromPost] = before unless before.to_s.empty?
+        api(:get, "/posts/#{thread_id}/thread?#{URI.encode_www_form(params)}")
+      end
+
+      def fetch_post(post_id)
+        api(:get, "/posts/#{post_id}")
+      end
+
+      def thread_post_skip?(post, thread_id)
+        post["id"] == thread_id || !post["type"].to_s.empty? || post["delete_at"].to_i.positive?
+      end
+
+      def read_thread_post(post, _thread_id)
+        {
+          "id" => post["id"].to_s,
+          "sender_name" => username_for(post["user_id"]),
+          "text" => truncate_thread_text(post["message"].to_s),
+          "created_at" => thread_time(post["create_at"]),
+          "from_bot" => thread_from_bot?(post),
+          "files" => thread_file_names(post)
+        }
+      end
+
+      def truncate_thread_text(text)
+        return text if text.length <= TEXT_LIMIT
+
+        "#{text[0, TEXT_LIMIT]}\u2026 (truncated)"
+      end
+
+      def thread_time(create_at)
+        Time.at(create_at.to_i / 1000.0).utc.iso8601
+      end
+
+      def thread_from_bot?(post)
+        post.dig("props", "from_bot").to_s == "true" || post["user_id"] == me["id"]
+      end
+
+      def thread_file_names(post)
+        names = Array(post.dig("metadata", "files")).map { |info| info["name"].to_s }.reject(&:empty?)
+        return names unless names.empty?
+
+        Array(post["file_ids"]).filter_map do |file_id|
+          info = file_info(file_id)
+          info && info["name"].to_s
+        end
+      end
+
+      # Keep one call under ~16k of text across the root and the window. Drop
+      # from the oldest end and count what was left out.
+      def cap_thread_text(result)
+        total = result["root"]["text"].length + result["posts"].sum { |post| post["text"].length }
+        while total > TOTAL_TEXT_LIMIT && result["posts"].size > 1
+          total -= result["posts"].first["text"].length
+          result["posts"].shift
+          result["omitted"] += 1
+        end
+        result
       end
 
       def attachments_for(post)

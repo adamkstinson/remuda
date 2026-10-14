@@ -18,6 +18,9 @@ module Remuda
   #   list_channels   -> [Hash]   every place this transport can send to:
   #     { "jid", "name", "transport", "kind" } with kind one of
   #     channel / private / dm / group. Default is none.
+  #   read_thread(jid:, thread_id:, limit: 20, before: nil) -> Hash | nil
+  #     Read one thread, newest window, oldest-first, bounded. Default is
+  #     not supported (raises NotImplementedError).
   module Channels
     # A file that arrived with an inbound message, already on disk.
     Attachment = Data.define(:id, :name, :mime_type, :size, :path)
@@ -49,6 +52,12 @@ module Remuda
 
       def list_channels
         []
+      end
+
+      # A thread as a bounded window: the root, the newest posts oldest-first,
+      # how many older posts were left out, and a cursor for the next page.
+      def read_thread(jid:, thread_id:, limit: 20, before: nil)
+        raise NotImplementedError, "#{name}: read_thread is not supported"
       end
 
       private
@@ -95,6 +104,10 @@ module Remuda
 
       def send_message(jid:, text:, thread_id: nil, files: nil)
         for_jid(jid)&.send_message(jid: jid, text: text, thread_id: thread_id, files: files)
+      end
+
+      def read_thread(jid:, thread_id:, limit: 20, before: nil)
+        for_jid(jid)&.read_thread(jid: jid, thread_id: thread_id, limit: limit, before: before)
       end
 
       # One flat list across every bound transport.
@@ -220,7 +233,55 @@ module Remuda
       end
     end
 
-    TOOLS = { SendTool::NAME => SendTool, ListTool::NAME => ListTool }.freeze
+    # channels.read_thread: read the thread the run was tagged in. Bounded on
+    # the host, so a busy thread cannot blow up a prompt.
+    module ReadThreadTool
+      NAME = "read_thread"
+      DESCRIPTION = "Read the messages in a thread on one of this agent's channels, " \
+                    "newest-first window with paging. Posts from bots are marked from_bot; " \
+                    "do not quote their text back into the thread."
+      SCHEMA = {
+        "type" => "object",
+        "properties" => {
+          "jid" => { "type" => "string",
+                     "description" => "Channel address, e.g. mattermost:<channel_id>." },
+          "thread_id" => { "type" => "string",
+                           "description" => "The thread's root post id." },
+          "limit" => { "type" => "integer",
+                       "description" => "Posts to return, newest. 1-50, default 20." },
+          "before" => { "type" => "string",
+                        "description" => "Page cursor from a previous call: return posts older than this." }
+        },
+        "required" => %w[jid thread_id]
+      }.freeze
+
+      def self.catalog_entry
+        { server: "channels", name: NAME, description: DESCRIPTION, input_schema: SCHEMA }
+      end
+
+      def self.call(registry, args)
+        args = args.transform_keys(&:to_s)
+        jid = args["jid"].to_s
+        thread_id = args["thread_id"].to_s
+        raise ArgumentError, "read_thread needs jid and thread_id" if jid.empty? || thread_id.empty?
+
+        result = registry.read_thread(
+          jid: jid,
+          thread_id: thread_id,
+          limit: args["limit"] || 20,
+          before: args["before"]
+        )
+        raise "channels.read_thread: not readable: #{thread_id} on #{jid}" if result.nil?
+
+        result
+      end
+    end
+
+    TOOLS = {
+      SendTool::NAME => SendTool,
+      ListTool::NAME => ListTool,
+      ReadThreadTool::NAME => ReadThreadTool
+    }.freeze
   end
 
   module Channels
