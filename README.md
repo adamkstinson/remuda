@@ -190,8 +190,8 @@ The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
 ([pi-mcp-adapter](https://www.npmjs.com/package/pi-mcp-adapter), pinned in
 `image/Dockerfile`) and points it at `/agent/mcp.json` and nothing else. A
 directory declares its servers in its root `mcp.json`, the same file
-`Remuda.tool` reads. Not `.pi/mcp.json` and not `.mcp.json`, which the box
-ignores. Client options sit next to the URL:
+`Remuda.tool` reads. Not `.pi/mcp.json` and not `.mcp.json`: those are for
+`pi` on the host, and the box masks them so their tokens stay out. Client options sit next to the URL:
 
 ```json
 {

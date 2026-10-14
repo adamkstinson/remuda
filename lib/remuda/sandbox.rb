@@ -212,12 +212,20 @@ module Remuda
     end
     private_class_method :ensure_pi_agent_dir
 
+    # Files in the agent directory that may hold real credentials and never
+    # reach the box. The box reads MCP config only from the per-run
+    # /agent/mcp.json (design/02-runner.md); .mcp.json and .pi/mcp.json exist
+    # for pi on the host and carry real tokens.
+    HOST_ONLY_FILES = %w[.env .mcp.json .pi/mcp.json].freeze
+
     # Only mask what exists: Docker creates a missing mount target, and in a
     # bind-mounted directory that is a root-owned file on the host.
     def self.binds(agent_dir, prompt_path: nil, mcp_path: nil, workflows_mode: "rw")
       agent_dir = File.expand_path(agent_dir)
       mounts = ["#{agent_dir}:/agent:rw"]
-      mounts << "/dev/null:/agent/.env:ro" if File.exist?(File.join(agent_dir, ".env"))
+      HOST_ONLY_FILES.each do |name|
+        mounts << "/dev/null:/agent/#{name}:ro" if File.exist?(File.join(agent_dir, name))
+      end
       workflows = File.join(agent_dir, ".remuda", "workflows")
       mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}" if File.directory?(workflows)
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path

@@ -50,4 +50,44 @@ class SandboxMountsTest < Minitest::Test
     binds = Remuda::Sandbox.batch_spec(@dir, prompt_path: @prompt).dig("HostConfig", "Binds")
     refute binds.any? { |b| b.include?("/agent/.env") }, binds.inspect
   end
+
+  # #48: the box loads only the per-run /agent/mcp.json. A host-side
+  # .mcp.json or .pi/mcp.json (for pi on the host) holds real tokens and is
+  # gitignored for that reason; inside the box it is only a readable secret.
+  def test_masks_host_mcp_configs_in_both_modes
+    write_host_mcp_configs
+    batch = Remuda::Sandbox.batch_spec(@dir, prompt_path: @prompt).dig("HostConfig", "Binds")
+    interactive = Remuda::Sandbox.interactive_spec(@dir).dig("HostConfig", "Binds")
+    [batch, interactive].each do |binds|
+      assert_includes binds, "/dev/null:/agent/.mcp.json:ro"
+      assert_includes binds, "/dev/null:/agent/.pi/mcp.json:ro"
+    end
+
+    pairs = Remuda::Sandbox.attach_args(@dir).each_cons(2).to_a
+    assert_includes pairs, ["-v", "/dev/null:/agent/.mcp.json:ro"]
+    assert_includes pairs, ["-v", "/dev/null:/agent/.pi/mcp.json:ro"]
+  end
+
+  def test_no_mask_for_host_mcp_configs_that_do_not_exist
+    binds = Remuda::Sandbox.batch_spec(@dir, prompt_path: @prompt).dig("HostConfig", "Binds")
+    refute binds.any? { |b| b.include?("/agent/.mcp.json") || b.include?("/agent/.pi/mcp.json") }, binds.inspect
+  end
+
+  # Masks are file binds; they sit before the per-run copy so the rewrite at
+  # /agent/mcp.json is untouched.
+  def test_per_run_mcp_json_still_mounts_alongside_the_masks
+    write_host_mcp_configs
+    copy = File.join(@dir, "run-mcp.json")
+    File.write(copy, "{}")
+    binds = Remuda::Sandbox.batch_spec(@dir, prompt_path: @prompt, mcp_path: copy).dig("HostConfig", "Binds")
+    assert_includes binds, "#{copy}:/agent/mcp.json:ro"
+  end
+
+  private
+
+  def write_host_mcp_configs
+    File.write(File.join(@dir, ".mcp.json"), '{"mcpServers":{"plane":{"headers":{"X-Plane-Key":"real"}}}}')
+    FileUtils.mkdir_p(File.join(@dir, ".pi"))
+    File.write(File.join(@dir, ".pi", "mcp.json"), '{"mcpServers":{}}')
+  end
 end

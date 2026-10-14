@@ -26,7 +26,8 @@ the host. Two doors share one container definition:
   `image/pi-profile/pi`, first on `PATH` in both images: it loads the MCP
   client (`pi-mcp-adapter`, pinned in the Dockerfiles) and points it, in
   exclusive mode, at `/agent/mcp.json`. That file is the one declaration; the
-  box reads no `.mcp.json` or `.pi/mcp.json`.
+  box reads no `.mcp.json` or `.pi/mcp.json`. Those two are for `pi` run on
+  the host, may hold real tokens, and are masked in the box like `.env`.
 - **Interactive and unattended share one sandbox posture.** Same image, same
   uid, same credential set, same HostConfig builder. `Remuda.agent` runs Pi
   with a prompt and exits; bare `remuda` allocates a TTY. Working on an agent
@@ -130,10 +131,11 @@ The agent directory is not one writable “brain.”
 | `.remuda/db/` | **not mounted** | | |
 | `.remuda/` as a whole | **not mounted** | | |
 | `.env` | **not mounted** | | |
+| `.mcp.json`, `.pi/mcp.json` (host `pi` config) | **not mounted** | | |
 | `.remuda/bin/`, `Gemfile` | not mounted | | |
 
-The directory is one rw bind; the exceptions sit on top of it. `.env` (when
-present) is masked by `/dev/null`, `.remuda/` by an empty root-owned tmpfs,
+The directory is one rw bind; the exceptions sit on top of it. `.env`,
+`.mcp.json`, and `.pi/mcp.json` (when present) are masked by `/dev/null`, `.remuda/` by an empty root-owned tmpfs,
 and `.remuda/workflows/` is bound back over that tmpfs with the door's write
 bit. Nothing is masked that does not exist on the host, because Docker would
 create the mount target in the operator's directory as root.
