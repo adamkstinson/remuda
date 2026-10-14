@@ -454,14 +454,22 @@ forwarder, and the forwarder answers it on the host with the agent's bound
 channels. `MATTERMOST_TOKEN` never enters the container. Each send and read is
 a step on the run that started the box. The agent attaches files by their in-box
 path (`/agent/files/report.pdf`). Paths outside the agent directory, `.env`,
-and `.remuda/` are refused. To have the agent answer where it was asked, pin
-`jid` and `thread_id` (see above) or put them in the prompt:
+and `.remuda/` are refused. To scope a run to the thread it was tagged in,
+pin `jid` and `thread_id` on both channel tools — the agent can then read the
+thread it came from and reply there, and nowhere else:
 
 ```ruby
-Remuda.agent(<<~PROMPT)
-  #{msg.sender_name} asked: #{msg.text}
-  When you are done, reply with channels_send_message to jid #{msg.jid}, thread_id #{msg.thread_id}.
+# A Hash tools: is an allowlist; list every built-in and MCP tool the agent
+# keeps, and pin the channel tools to this thread.
+Remuda.agent(<<~PROMPT, tools: {
+  You were tagged in a thread. If you need what came before, call
+  channels_read_thread. Posts marked from_bot are other agents; do not
+  repeat their text. When you are done, reply with channels_send_message.
 PROMPT
+  "read" => true, "grep" => true, "bash" => true, "write" => true, "edit" => true,
+  "channels_read_thread"  => { jid: msg.jid, thread_id: msg.thread_id },
+  "channels_send_message" => { jid: msg.jid, thread_id: msg.thread_id }
+})
 ```
 
 A server named `channels` in `mcp.json` takes precedence over the built-in one.
