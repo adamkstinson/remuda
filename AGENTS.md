@@ -22,7 +22,8 @@ The workflow merges after approval and checks are green.
 
 - The default branch moves only through a merged pull request. Commit on the branch you were given.
 - Push new commits. Pushed history stays as it is.
-- End every commit message with `Co-Authored-By: remuda-dev <remuda-dev@darkhorse.so>`.
+- End every commit message with the trailer `Agent: remuda-dev`. Never add `Co-Authored-By` or any other trailer that names a person or an email address.
+- Never @-mention, tag, assign, or request review from anyone, anywhere. The one exception is the review request to `adamkstinson` in the `pull-request` skill.
 - Your git identity is configured for you. Never run `git config`, and never commit as any other name or email. If a commit fails for want of an identity, comment on the issue and stop.
 - End every comment and pull request body you write with `<!-- coding-agent -->`. The workflow uses it to tell your writing from the maintainer’s.
 - You work alone in the session. Where a skill says to ask your human partner, comment on the pull request (or on the issue, before a pull request exists) and stop.
