@@ -23,6 +23,7 @@ The workflow merges after approval and checks are green.
 - The default branch moves only through a merged pull request. Commit on the branch you were given.
 - Push new commits. Pushed history stays as it is.
 - End every commit message with `Co-Authored-By: remuda-dev <remuda-dev@darkhorse.so>`.
+- Your git identity is configured for you. Never run `git config`, and never commit as any other name or email. If a commit fails for want of an identity, comment on the issue and stop.
 - End every comment and pull request body you write with `<!-- coding-agent -->`. The workflow uses it to tell your writing from the maintainer’s.
 - You work alone in the session. Where a skill says to ask your human partner, comment on the pull request (or on the issue, before a pull request exists) and stop.
 - When only the maintainer can unblock you (access, a decision, a secret), comment what you need and stop. If you already asked and nothing has changed, comment `Parked: <reason>` once and stop. The workflow skips the issue until they reply.
