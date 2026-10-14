@@ -225,6 +225,37 @@ class McpForwarderTest < Minitest::Test
     end
   end
 
+  # A zero-byte .mcp.json (a write caught mid-flight, say) used to raise a
+  # bare, context-free JSON::ParserError out of Sandbox.run and fail the
+  # whole channel reply. Empty is now just "no servers declared" \u2014 same as
+  # the file not existing \u2014 as long as some local route keeps `open` past
+  # its early return.
+  def test_open_with_an_empty_mcp_json_is_treated_as_no_servers
+    Dir.mktmpdir("remuda-agent") do |dir|
+      File.write(File.join(dir, ".mcp.json"), "")
+      Dir.mktmpdir do |tmp|
+        Remuda::McpForwarder.open(dir, tmp, local: { "channels" => ->(_m, _b) { [200, {}, "{}"] } }) do |path, _forwarder|
+          refute_nil path
+          config = JSON.parse(File.read(path))
+          assert_equal ["channels"], config["mcpServers"].keys
+        end
+      end
+    end
+  end
+
+  # Invalid-but-nonempty JSON is a real config error the operator needs to
+  # see, not silently swallowed the way empty is.
+  def test_open_with_malformed_mcp_json_still_raises
+    Dir.mktmpdir("remuda-agent") do |dir|
+      File.write(File.join(dir, ".mcp.json"), "{not json")
+      Dir.mktmpdir do |tmp|
+        assert_raises(JSON::ParserError) do
+          Remuda::McpForwarder.open(dir, tmp) { |_path, _forwarder| }
+        end
+      end
+    end
+  end
+
   def test_batch_and_interactive_mount_the_rewritten_file_read_only
     Dir.mktmpdir do |tmp|
       prompt = File.join(tmp, "prompt.txt")

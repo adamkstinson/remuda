@@ -12,11 +12,44 @@ module Remuda
     # wait() must pass a matching read_timeout or the HTTP client drops first.
     WAIT_SECONDS = 3600
 
+    # Talking to dockerd over the unix socket occasionally drops a response
+    # mid-flight (seen in production as Docker::Error::TimeoutError and a bare
+    # JSON::ParserError on an empty body) when the fleet has many containers
+    # starting/stopping at once. None of these mean the request was bad; a
+    # fresh attempt against the same socket succeeds. Retried here, not left
+    # to bubble up as a channel-reply failure with no recovery.
+    RETRYABLE_ERRORS = [
+      JSON::ParserError,
+      Docker::Error::TimeoutError,
+      Docker::Error::ServerError,
+      Docker::Error::IOError,
+      Errno::ECONNRESET,
+      Errno::EPIPE,
+      EOFError,
+      IOError
+    ].freeze
+    MAX_ATTEMPTS = 3
+    RETRY_BACKOFF_SECONDS = 2
+
     def self.run(agent_dir, prompt, provider: nil, model: nil, session_id: nil, tools: nil, exclude_tools: nil, policy: nil)
       agent_dir = File.expand_path(agent_dir)
       policy = policy_for(agent_dir, policy || ToolPolicy.new(tools: tools, exclude_tools: exclude_tools))
       configure_wait_timeout!
 
+      attempts = 0
+      begin
+        attempts += 1
+        run_once(agent_dir, prompt, provider: provider, model: model, session_id: session_id, policy: policy)
+      rescue *RETRYABLE_ERRORS => e
+        raise if attempts >= MAX_ATTEMPTS
+
+        warn "remuda sandbox: #{e.class} talking to Docker (attempt #{attempts}/#{MAX_ATTEMPTS}), retrying: #{e.message}"
+        sleep(RETRY_BACKOFF_SECONDS * attempts)
+        retry
+      end
+    end
+
+    def self.run_once(agent_dir, prompt, provider:, model:, session_id:, policy:)
       Dir.mktmpdir("remuda-sandbox") do |tmpdir|
         File.chmod(0o700, tmpdir)
         prompt_path = File.join(tmpdir, "prompt.txt")
@@ -53,6 +86,7 @@ module Remuda
         )
       end
     end
+    private_class_method :run_once
 
     # Without provider: / model:, Pi picks its own default from the agent's
     # settings.json. Remuda does not declare a second one. session_id: resumes

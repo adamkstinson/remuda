@@ -45,7 +45,7 @@ module Remuda
       host_file = File.join(File.expand_path(agent_dir), Mcp::CONFIG)
       return yield(nil, nil) if !File.file?(host_file) && local.empty?
 
-      config = File.file?(host_file) ? JSON.parse(File.read(host_file)) : { "mcpServers" => {} }
+      config = read_config(host_file)
       token = SecureRandom.hex(16)
       forwarder = new({}, token: token, bind: bind_address)
       forwarder.start
@@ -65,6 +65,21 @@ module Remuda
         forwarder.stop
       end
     end
+
+    # A zero-byte .mcp.json (a write caught mid-flight, e.g.) is treated as
+    # absent rather than crashing the run: JSON.parse("") raises
+    # JSON::ParserError with no context, and there is nothing to forward
+    # anyway. Invalid-but-nonempty JSON still raises — that is a real config
+    # error the operator needs to see, not silently swallowed.
+    def self.read_config(host_file)
+      return { "mcpServers" => {} } unless File.file?(host_file)
+
+      raw = File.read(host_file)
+      return { "mcpServers" => {} } if raw.strip.empty?
+
+      JSON.parse(raw)
+    end
+    private_class_method :read_config
 
     def self.add_local(agent_config, routes, local, base_url)
       local.each do |name, handler|
