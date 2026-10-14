@@ -234,12 +234,36 @@ class McpForwarderTest < Minitest::Test
       dummy = File.expand_path("dummy", __dir__)
 
       batch = Remuda::Sandbox.batch_spec(dummy, prompt_path: prompt, mcp_path: mcp)
-      assert_includes batch.dig("HostConfig", "Binds"), "#{mcp}:/agent/.mcp.json:ro"
+      assert_includes batch.dig("HostConfig", "Binds"), "#{mcp}:/run/remuda/mcp.json:ro"
 
       interactive = Remuda::Sandbox.interactive_spec(dummy, mcp_path: mcp)
-      assert_includes interactive.dig("HostConfig", "Binds"), "#{mcp}:/agent/.mcp.json:ro"
+      assert_includes interactive.dig("HostConfig", "Binds"), "#{mcp}:/run/remuda/mcp.json:ro"
       args = Remuda::Sandbox.attach_args(dummy, mcp_path: mcp)
-      assert args.each_cons(2).any? { |a, b| a == "-v" && b == "#{mcp}:/agent/.mcp.json:ro" }, args.inspect
+      assert args.each_cons(2).any? { |a, b| a == "-v" && b == "#{mcp}:/run/remuda/mcp.json:ro" }, args.inspect
+    end
+  end
+
+  # #50: the per-run copy lives outside /agent. Mounting it at a path the agent
+  # directory does not have makes Docker create a root-owned file there.
+  def test_no_bind_targets_a_missing_path_inside_the_agent_directory
+    Dir.mktmpdir do |dir|
+      Dir.mktmpdir do |tmp|
+        prompt = File.join(tmp, "prompt.txt")
+        mcp = File.join(tmp, "mcp.json")
+        File.write(prompt, "hi")
+        File.write(mcp, "{}")
+        [Remuda::Sandbox.batch_spec(dir, prompt_path: prompt, mcp_path: mcp),
+         Remuda::Sandbox.interactive_spec(dir, mcp_path: mcp)].each do |spec|
+          spec.dig("HostConfig", "Binds").each do |bind|
+            source, target = bind.split(":")
+            next unless target.start_with?("/agent/")
+            next if source == "/dev/null" # masks only exist when the file does
+
+            host = File.join(dir, target.delete_prefix("/agent/"))
+            assert File.exist?(host), "#{bind} would make Docker create #{host}"
+          end
+        end
+      end
     end
   end
 

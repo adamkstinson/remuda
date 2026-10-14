@@ -24,7 +24,7 @@ class PiProfileTest < Minitest::Test
   def test_profile_loads_the_client_and_reads_only_the_agents_mcp_json
     with_shim(mcp_json: true) do |run|
       out = run.call("--mode", "json", "--print")
-      assert_equal "-e /adapter --mcp-config AGENT/.mcp.json --mode json --print", out[:args]
+      assert_equal "-e /adapter --mcp-config RUN/mcp.json --mode json --print", out[:args]
       assert_equal "exclusive", out[:mode]
     end
   end
@@ -52,7 +52,11 @@ class PiProfileTest < Minitest::Test
     Dir.mktmpdir("pi-profile") do |dir|
       agent = File.join(dir, "agent")
       FileUtils.mkdir_p(agent)
-      File.write(File.join(agent, ".mcp.json"), "{}") if mcp_json
+      run_dir = File.join(dir, "run")
+      FileUtils.mkdir_p(run_dir)
+      # The agent's own .mcp.json is not what the box reads: only the per-run copy.
+      File.write(File.join(agent, ".mcp.json"), "{}")
+      File.write(File.join(run_dir, "mcp.json"), "{}") if mcp_json
       fake = File.join(dir, "fake-pi")
       File.write(fake, "#!/bin/sh\necho \"$*\"\necho \"${PI_MCP_CONFIG_MODE:-}\"\n")
       File.chmod(0o755, fake)
@@ -60,14 +64,15 @@ class PiProfileTest < Minitest::Test
       File.write(shim, File.read(SHIM)
         .gsub("/usr/local/bin/pi", fake)
         .gsub("/usr/local/lib/node_modules/pi-mcp-adapter", "/adapter")
-        .gsub("/agent/", "#{agent}/"))
+        .gsub("/agent/", "#{agent}/")
+        .gsub("/run/remuda/", "#{run_dir}/"))
       File.chmod(0o755, shim)
 
       run = lambda do |*args|
         stdout, status = Open3.capture2({ "PI_MCP_CONFIG_MODE" => nil }, shim, *args)
         assert status.success?
         lines = stdout.lines.map(&:chomp)
-        { args: lines[0].sub(agent, "AGENT"), mode: lines[1].to_s }
+        { args: lines[0].sub(agent, "AGENT").sub(run_dir, "RUN"), mode: lines[1].to_s }
       end
       yield run
     end

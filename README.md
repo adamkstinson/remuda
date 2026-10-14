@@ -236,7 +236,7 @@ there; the file is never mounted into the sandbox.
 
 The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
 ([pi-mcp-adapter](https://www.npmjs.com/package/pi-mcp-adapter), pinned in
-`image/Dockerfile`) and points it at `/agent/.mcp.json` and nothing else. A
+`image/Dockerfile`) and points it at this run's copy of `.mcp.json` and nothing else. A
 directory declares its servers in its root `.mcp.json`: pi's own project
 config, so `pi` on the host, `Remuda.tool`, and the box all read the same
 file. Header values use pi's `${VAR}` syntax; the value lives in `.env`.
@@ -260,8 +260,8 @@ own tools. Without it Pi reaches them through one `mcp` proxy tool.
 
 The sandbox reaches MCP servers that declare `headers` through a per-run
 forwarder on the host. `.mcp.json` stays the declaration and is not changed on
-disk. For each run Remuda writes a copy and mounts it read-only over
-`/agent/.mcp.json`:
+disk. For each run Remuda writes a copy and mounts it read-only at
+`/run/remuda/mcp.json`, beside the prompt and outside `/agent`:
 
 - a server with `headers` points at
   `http://host.docker.internal:<port>/<run token>/<server>` and carries no

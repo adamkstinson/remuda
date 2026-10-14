@@ -246,7 +246,9 @@ module Remuda
       workflows = File.join(agent_dir, ".remuda", "workflows")
       mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}" if File.directory?(workflows)
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
-      mounts << "#{mcp_path}:/agent/#{Mcp::CONFIG}:ro" if mcp_path
+      # Beside the prompt, not in /agent: the agent may have no .mcp.json, and
+      # Docker would create a root-owned mount target in its directory (#50).
+      mounts << "#{mcp_path}:#{Mcp::RUN_CONFIG}:ro" if mcp_path
       mounts.concat(Mounts.for(agent_dir))
     end
     private_class_method :binds
