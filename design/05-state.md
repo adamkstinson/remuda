@@ -29,10 +29,12 @@ Harness state in the database, agent memory in files.
   | `schedules` | `state/schedules/*.json` |
   | `channel_cursors` | `state/channels/<ch>.json` offsets |
   | `channel_sessions` / `channel_messages` | `planet-sessions.json` etc. |
+  | `channel_threads` | which Pi session a `(jid, thread_id)` resumes |
 
   `channel_sessions` exists (channel, jid, JSON `data`; Teams keeps its
-  conversation references there). The others land with the transport that
-  needs them.
+  conversation references there), and `channel_threads` maps a channel
+  thread to the `session_id` passed to Pi. The others land with the
+  transport that needs them.
 
 - **The boundary rule:** rows the *harness* writes (runs, steps, schedules,
   cursors) live in the DB. Files the *agent* writes as its own memory (e.g.

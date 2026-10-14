@@ -50,7 +50,18 @@ Transports in the gem, bindings in the agent.
   messages survive a restart. Dedup by activity id. Stdlib only (no `jwt`
   gem, no SDK). Text and Markdown in v1.
 - **Channel state is rows** (`channel_cursors`, `channel_sessions`,
-  `channel_messages` — see [05-state](./05-state.md)), not JSON files.
+  `channel_messages`, `channel_threads` — see [05-state](./05-state.md)), not
+  JSON files.
+- **A thread maps to a Pi session** (`channel_threads`). One row per
+  `(jid, thread_id)` holds the `session_id` passed to Pi as
+  `--session-id`; it is minted (a UUID) on the first message in a thread and
+  touched on every later one. Runs stay as they are: one agent call is one
+  turn, and resuming the session is what carries context between turns. A
+  listener calls `channels.session_for(msg)` and runs
+  `Remuda.agent(..., session_id: …)`. A workflow that posts a new thread can
+  `channels.bind_thread` the thread to the `session_id` of the run that
+  wrote its root, so a later reply resumes that run's session. Session
+  growth and compaction belong to Pi; Remuda only stores the mapping.
 - **Outbound is a tool.** With any transport bound, `channels.send_message`
   is in the tool catalog. `Remuda.tool("channels.send_message", jid:, text:,
   thread_id:, files:)` sends through the registry and records a step like an
@@ -73,9 +84,6 @@ Transports in the gem, bindings in the agent.
   one supervising process.
 - Supervision: systemd user unit per agent? `remuda channels start/stop`
   wrapping it?
-- **Conversation → run mapping**: is each inbound message a `workflow_run`
-  (kind: `message`), or do sessions get their own table with runs hanging off
-  them?
 - **Durable cursor**: Mattermost keeps its cursor (last `create_at`) in
   memory and accepts `since:`. Persisting it is a `channel_cursors` row once
   05-state lands, so a restarted daemon backfills too.

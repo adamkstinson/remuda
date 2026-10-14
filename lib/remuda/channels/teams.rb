@@ -63,8 +63,7 @@ module Remuda
         private
 
         def with_db(&block)
-          Db.connect(@agent_dir) unless ActiveRecord::Base.connected?
-          ActiveRecord::Base.connection_pool.with_connection(&block)
+          Database.with_db(@agent_dir, &block)
         end
       end
 

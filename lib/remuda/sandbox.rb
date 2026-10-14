@@ -12,7 +12,7 @@ module Remuda
     # wait() must pass a matching read_timeout or the HTTP client drops first.
     WAIT_SECONDS = 3600
 
-    def self.run(agent_dir, prompt, provider: nil, model: nil)
+    def self.run(agent_dir, prompt, provider: nil, model: nil, session_id: nil)
       agent_dir = File.expand_path(agent_dir)
       configure_wait_timeout!
 
@@ -28,7 +28,7 @@ module Remuda
         local = ChannelsMcp.routes(agent_dir, run: Current.run)
         McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
           container = Docker::Container.create(
-            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model)
+            batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model, session_id: session_id)
           )
           begin
             container.start
@@ -53,8 +53,9 @@ module Remuda
     end
 
     # Without provider: / model:, Pi picks its own default from the agent's
-    # settings.json. Remuda does not declare a second one.
-    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil, provider: nil, model: nil)
+    # settings.json. Remuda does not declare a second one. session_id: resumes
+    # an existing Pi session and creates it if missing (Pi --session-id).
+    def self.batch_spec(agent_dir, prompt_path:, mcp_path: nil, provider: nil, model: nil, session_id: nil)
       agent_dir = File.expand_path(agent_dir)
       ensure_pi_agent_dir(agent_dir)
       cmd = [
@@ -64,6 +65,11 @@ module Remuda
       ]
       cmd.push("--provider", provider.to_s) unless provider.to_s.empty?
       cmd.push("--model", model.to_s) unless model.to_s.empty?
+      unless session_id.to_s.empty?
+        raise ArgumentError, "invalid session_id: #{session_id.inspect}" unless valid_session_id?(session_id.to_s)
+
+        cmd.push("--session-id", session_id.to_s)
+      end
       cmd << "@/run/remuda/prompt.txt"
       {
         "Image" => Image.for(agent_dir),
@@ -170,6 +176,12 @@ module Remuda
       ]
     end
     private_class_method :github_env
+
+    # Pi session ids are UUIDs; anything else must not reach a command line.
+    def self.valid_session_id?(value)
+      value.match?(/\A[0-9a-f-]{8,}\z/i)
+    end
+    private_class_method :valid_session_id?
 
     def self.configure_wait_timeout!
       Docker.options = Docker.options.merge(
