@@ -36,17 +36,7 @@ module Remuda
       policy = policy_for(agent_dir, policy || ToolPolicy.new(tools: tools, exclude_tools: exclude_tools))
       configure_wait_timeout!
 
-      attempts = 0
-      begin
-        attempts += 1
-        run_once(agent_dir, prompt, provider: provider, model: model, session_id: session_id, policy: policy)
-      rescue *RETRYABLE_ERRORS => e
-        raise if attempts >= MAX_ATTEMPTS
-
-        warn "remuda sandbox: #{e.class} talking to Docker (attempt #{attempts}/#{MAX_ATTEMPTS}), retrying: #{e.message}"
-        sleep(RETRY_BACKOFF_SECONDS * attempts)
-        retry
-      end
+      run_once(agent_dir, prompt, provider: provider, model: model, session_id: session_id, policy: policy)
     end
 
     def self.run_once(agent_dir, prompt, provider:, model:, session_id:, policy:)
@@ -61,12 +51,11 @@ module Remuda
         text = ""
         local = ChannelsMcp.routes(agent_dir, run: Current.run, pins: policy.pins)
         McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
-          container = Docker::Container.create(
+          container = create_and_start(
             batch_spec(agent_dir, prompt_path: prompt_path, mcp_path: mcp_path, provider: provider, model: model,
                                   session_id: session_id, policy: policy)
           )
           begin
-            container.start
             wait = container.wait(WAIT_SECONDS)
             text = decode_logs(container.logs(stdout: true, stderr: true))
           ensure
@@ -87,6 +76,31 @@ module Remuda
       end
     end
     private_class_method :run_once
+
+    # Only getting the container running is retried. After start the agent may
+    # already have acted (posted, commented, committed), so a later error is
+    # raised: running it again would repeat those actions.
+    def self.create_and_start(spec)
+      attempts = 0
+      begin
+        attempts += 1
+        container = Docker::Container.create(spec)
+        begin
+          container.start
+        rescue StandardError
+          container.delete(force: true) rescue nil
+          raise
+        end
+        container
+      rescue *RETRYABLE_ERRORS => e
+        raise if attempts >= MAX_ATTEMPTS
+
+        warn "remuda sandbox: #{e.class} starting the container (attempt #{attempts}/#{MAX_ATTEMPTS}), retrying: #{e.message}"
+        sleep(RETRY_BACKOFF_SECONDS * attempts)
+        retry
+      end
+    end
+    private_class_method :create_and_start
 
     # Without provider: / model:, Pi picks its own default from the agent's
     # settings.json. Remuda does not declare a second one. session_id: resumes
