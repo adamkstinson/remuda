@@ -64,8 +64,8 @@ reaches the model API directly.
 **Header-declared MCP (laptop path).** A server whose `.mcp.json` entry
 declares `headers` is reached through a per-run forwarder on the host
 (`Remuda::McpForwarder`). The runner rewrites the agent's copy of `.mcp.json`
-to point that server at the forwarder with no headers, mounts the copy over
-`/agent/.mcp.json`, and the forwarder adds the declared headers (filled from
+to point that server at the forwarder with no headers, mounts the copy at
+`/run/remuda/mcp.json`, and the forwarder adds the declared headers (filled from
 `.env`, then the process env) on the way to the real URL. It is a streaming
 reverse proxy, not an MCP client, and lives only as long as the container.
 Each run's paths start with a random token, so another container on the host

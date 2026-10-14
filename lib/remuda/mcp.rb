@@ -11,6 +11,8 @@ module Remuda
     # Remuda read the same one. Header values use pi's ${VAR} syntax, filled
     # from the agent .env, then the process env.
     CONFIG = ".mcp.json"
+    # Where the box reads this run's rewritten copy (image/pi-profile/pi).
+    RUN_CONFIG = "/run/remuda/mcp.json"
     PLACEHOLDER = /\$\{(\w+)\}/
 
     def self.call(url, tool_name, arguments, token: nil, headers: {})
