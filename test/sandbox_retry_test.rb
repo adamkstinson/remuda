@@ -46,6 +46,45 @@ class SandboxRetryTest < Minitest::Test
     assert_equal Remuda::Sandbox::MAX_ATTEMPTS, attempts
   end
 
+  # Once the container has started, the agent may already have acted (posted,
+  # commented, committed). Running it again would repeat that, so an error
+  # from wait or logs is raised, never retried.
+  def test_an_error_after_the_container_started_is_not_retried
+    attempts = 0
+    deleted = 0
+    started = Struct.new(:on_delete) do
+      def start = self
+      def wait(_seconds) = raise(Docker::Error::TimeoutError, "read timeout reached")
+      def logs(**) = ""
+      def delete(**) = on_delete.call
+    end
+    with_fake_create(->(n) { attempts = n; started.new(-> { deleted += 1 }) }) do
+      with_no_sleep do
+        assert_raises(Docker::Error::TimeoutError) { Remuda::Sandbox.run(DUMMY, "hi") }
+      end
+    end
+    assert_equal 1, attempts
+    assert_equal 1, deleted
+  end
+
+  def test_a_container_that_fails_to_start_is_deleted_before_the_retry
+    attempts = 0
+    deleted = 0
+    flaky = Struct.new(:n, :on_delete, :log_text) do
+      def start = (n < 2 ? raise(Docker::Error::ServerError, "start hiccup") : self)
+      def wait(_seconds) = { "StatusCode" => 0 }
+      def logs(**) = log_text
+      def delete(**) = on_delete.call
+    end
+    with_fake_create(->(n) { attempts = n; flaky.new(n, -> { deleted += 1 }, sample_jsonl) }) do
+      with_no_sleep do
+        assert Remuda::Sandbox.run(DUMMY, "hi").ok
+      end
+    end
+    assert_equal 2, attempts
+    assert_equal 2, deleted # the failed one, then the finished one
+  end
+
   def test_a_non_retryable_error_is_not_retried
     attempts = 0
     with_fake_create(->(n) { attempts = n; raise ArgumentError, "bad spec" }) do
