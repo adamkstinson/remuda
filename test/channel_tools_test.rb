@@ -263,6 +263,8 @@ class ChannelToolsTest < Minitest::Test
     step = Remuda::WorkflowStep.find_by(kind: "tool", name: "channels.read_thread")
     refute_nil step
     assert_equal "t-9", step.input["thread_id"]
+    assert_equal 0, step.output["omitted"]
+    assert step.output.key?("before")
   end
 
   # The whole point of pinning the thread: the agent can read where it was
