@@ -168,6 +168,42 @@ Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")
 Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolves the provider
 ```
 
+#### Narrowing the tools for one call
+
+By default the sandbox sees the whole catalog: every Pi built-in, every
+server in `.mcp.json`, and the channels tools when a transport is bound.
+Narrow that for a single call with `tools:` (allowlist) or `exclude_tools:`
+(denylist). The two are mutually exclusive. An empty allowlist passes
+`--no-tools`.
+
+```ruby
+Remuda.agent(prompt, tools: %w[read grep channels_send_message])   # allowlist
+Remuda.agent(prompt, exclude_tools: %w[bash write edit])           # denylist
+Remuda.agent(prompt, tools: [])                                    # no tools
+```
+
+Tool names are Pi's: built-ins (`read`, `bash`, `edit`, `write`, …) and
+`<server>_<tool>` for MCP (`channels_send_message`,
+`planet_list_work_items`).
+
+The Hash form of `tools:` also pins arguments. A pinned argument is filled in
+by the host, removed from the tool's advertised schema, and refused if the
+model sends a different value. Pins are only valid for tools Remuda answers
+on the host — today the `channels` server. Pinning a forwarded MCP server
+(Planet, Twenty, …) raises before the container starts.
+
+```ruby
+# The agent may read, but it can only reply in the thread this run came from.
+Remuda.agent(prompt, tools: {
+  "read" => true,
+  "channels_send_message" => { jid: msg.jid, thread_id: msg.thread_id },
+  "channels_read_thread"  => { jid: msg.jid, thread_id: msg.thread_id }
+})
+```
+
+The `agent` step's `input` records `tools` / `exclude_tools` as given, pins
+included.
+
 The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
 `PI_MODEL` are not a fallback for it.
 
@@ -386,9 +422,10 @@ Put the three values in the agent's `.env` as `TEAMS_APP_ID`,
 
 ### Channels as a tool
 
-When `channels.yml` binds at least one transport, two tools appear alongside
-the MCP ones: `channels.list_channels` and `channels.send_message`. `remuda
-tools` lists them, and with no bindings they are not there.
+When `channels.yml` binds at least one transport, three tools appear alongside
+the MCP ones: `channels.list_channels`, `channels.send_message`, and
+`channels.read_thread`. `remuda tools` lists them, and with no bindings they
+are not there.
 
 `list_channels` is everywhere the agent can post, as one flat list across all
 its transports — several Mattermost channels, a Teams conversation, whatever
@@ -407,9 +444,35 @@ Remuda.tool("channels.list_channels")
 membership on every team the bot is on. Teams has no directory a bot can
 browse, so it lists the conversations it has already heard from.
 
+`read_thread` reads one thread, so an agent that was tagged into a
+conversation it has never seen can catch up without the whole thread being
+prepended to every prompt. It returns the root, the newest posts
+oldest-first, how many older posts were left out, and a cursor for the next
+page:
+
+```ruby
+Remuda.tool("channels.read_thread", jid: "mattermost:abc", thread_id: "rootid")
+# => { "root"  => { "id" => "rootid", "sender_name" => "adam", "text" => "topic", … },
+#      "posts" => [ { "id" => "p2", "sender_name" => "adam", "text" => "…",
+#                     "created_at" => "2026-01-01T00:00:00Z", "from_bot" => false,
+#                     "files" => ["cat.jpg"] }, … ],
+#      "omitted" => 179, "before" => "p1" }
+Remuda.tool("channels.read_thread", jid: "mattermost:abc", thread_id: "rootid", before: "p1")
+```
+
+`limit` is 1-50 (default 20). `before` is the `before` from a previous call;
+keep passing it until it comes back `nil` to walk the whole thread. Posts from
+bots (including this bot) are marked `from_bot` so the agent does not answer
+them or quote them back. Files are listed by name only, never downloaded.
+The host bounds each call: posts are truncated at 4,000 characters and a call
+returns at most ~16,000 characters in total, dropping the oldest and bumping
+`omitted`. `read_thread` raises when no channel delivers, the same as
+`send_message`.
+
 From a workflow script both go through `Remuda.tool` and are recorded as
 `workflow_steps` rows (`kind: "tool"`, `name: "channels.send_message"` /
-`"channels.list_channels"`). `send_message` raises when no channel delivers:
+`"channels.list_channels"` / `"channels.read_thread"`). `send_message` raises
+when no channel delivers:
 
 ```ruby
 Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.",
@@ -417,21 +480,29 @@ Remuda.tool("channels.send_message", jid: "mattermost:abc", text: "Digest ready.
 # => { "thread_id" => "…" }
 ```
 
-Inside the sandbox Pi sees them as `channels_list_channels` and
-`channels_send_message`. The runner adds a
+Inside the sandbox Pi sees them as `channels_list_channels`,
+`channels_send_message`, and `channels_read_thread`. The runner adds a
 `channels` server to the box's `.mcp.json` that points at the per-run
 forwarder, and the forwarder answers it on the host with the agent's bound
-channels. `MATTERMOST_TOKEN` never enters the container. Each send is a step
-on the run that started the box. The agent attaches files by their in-box
+channels. `MATTERMOST_TOKEN` never enters the container. Each send and read is
+a step on the run that started the box. The agent attaches files by their in-box
 path (`/agent/files/report.pdf`). Paths outside the agent directory, `.env`,
-and `.remuda/` are refused. To have the agent answer where it was asked, put
-the `jid` and `thread_id` in the prompt:
+and `.remuda/` are refused. To scope a run to the thread it was tagged in,
+pin `jid` and `thread_id` on both channel tools — the agent can then read the
+thread it came from and reply there, and nowhere else:
 
 ```ruby
-Remuda.agent(<<~PROMPT)
-  #{msg.sender_name} asked: #{msg.text}
-  When you are done, reply with channels_send_message to jid #{msg.jid}, thread_id #{msg.thread_id}.
+# A Hash tools: is an allowlist; list every built-in and MCP tool the agent
+# keeps, and pin the channel tools to this thread.
+Remuda.agent(<<~PROMPT, tools: {
+  You were tagged in a thread. If you need what came before, call
+  channels_read_thread. Posts marked from_bot are other agents; do not
+  repeat their text. When you are done, reply with channels_send_message.
 PROMPT
+  "read" => true, "grep" => true, "bash" => true, "write" => true, "edit" => true,
+  "channels_read_thread"  => { jid: msg.jid, thread_id: msg.thread_id },
+  "channels_send_message" => { jid: msg.jid, thread_id: msg.thread_id }
+})
 ```
 
 A server named `channels` in `.mcp.json` takes precedence over the built-in one.

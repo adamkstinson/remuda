@@ -11,6 +11,7 @@ class ChannelToolsTest < Minitest::Test
   # A transport that records what it was asked to send.
   class Recorder < Remuda::Channels::Channel
     SENT = []
+    READ = []
 
     def self.from_config(_config, env)
       new(env)
@@ -27,6 +28,11 @@ class ChannelToolsTest < Minitest::Test
     def send_message(jid:, text:, thread_id: nil, files: nil)
       SENT << { jid: jid, text: text, thread_id: thread_id, files: files }
       thread_id || "root-1"
+    end
+
+    def read_thread(jid:, thread_id:, limit: 20, before: nil)
+      READ << { jid: jid, thread_id: thread_id, limit: limit, before: before }
+      { "root" => { "id" => thread_id, "text" => "topic" }, "posts" => [], "omitted" => 0, "before" => nil }
     end
 
     def list_channels
@@ -51,6 +57,7 @@ class ChannelToolsTest < Minitest::Test
 
   def setup
     Recorder::SENT.clear
+    Recorder::READ.clear
     disconnect_db
     ENV["REMUDA_FORWARDER_BIND"] = "127.0.0.1"
     @dir = Dir.mktmpdir("remuda-channel-tools")
@@ -103,7 +110,7 @@ class ChannelToolsTest < Minitest::Test
 
   def test_tools_lists_send_message_only_when_a_transport_is_bound
     names = Remuda.tools(@dir).map { |t| "#{t[:server]}.#{t[:name]}" }
-    assert_equal ["channels.send_message", "channels.list_channels"], names
+    assert_equal ["channels.send_message", "channels.list_channels", "channels.read_thread"], names
     tool = Remuda.tools(@dir).first
     assert_equal %w[jid text], tool[:input_schema]["required"]
 
@@ -150,7 +157,7 @@ class ChannelToolsTest < Minitest::Test
       assert init.dig("result", "capabilities", "tools")
 
       tools = call.call("tools/list", {})
-      assert_equal %w[send_message list_channels], tools.dig("result", "tools").map { |t| t["name"] }
+      assert_equal %w[send_message list_channels read_thread], tools.dig("result", "tools").map { |t| t["name"] }
 
       listed = call.call("tools/call", { "name" => "list_channels", "arguments" => {} })
       refute listed.dig("result", "isError")
@@ -191,6 +198,104 @@ class ChannelToolsTest < Minitest::Test
     end
   end
 
+  # --- pinned arguments ------------------------------------------------------
+
+  def test_pinned_arguments_are_hidden_from_the_advertised_schema
+    pins = { "channels_send_message" => { "jid" => "rec:town", "thread_id" => "root-9" } }
+    with_channels_server(pins: pins) do |call|
+      send_message = call.call("tools/list", {}).dig("result", "tools").find { |t| t["name"] == "send_message" }
+      refute send_message.dig("inputSchema", "properties").key?("jid")
+      refute send_message.dig("inputSchema", "properties").key?("thread_id")
+      refute_includes send_message.dig("inputSchema", "required"), "jid"
+      assert send_message.dig("inputSchema", "properties").key?("text")
+      assert_match(/fixed/i, send_message["description"])
+    end
+  end
+
+  def test_a_pinned_argument_is_delivered_when_the_model_omits_it
+    run = start_run
+    pins = { "channels_send_message" => { "jid" => "rec:town", "thread_id" => "root-9" } }
+    with_channels_server(run: run, pins: pins) do |call|
+      reply = call.call("tools/call", { "name" => "send_message", "arguments" => { "text" => "hello" } })
+      refute reply.dig("result", "isError"), reply.dig("result", "content", 0, "text")
+    end
+
+    assert_equal [{ jid: "rec:town", text: "hello", thread_id: "root-9", files: nil }], Recorder::SENT
+    step = Remuda::WorkflowStep.find_by(kind: "tool", name: "channels.send_message")
+    assert_equal "rec:town", step.input["jid"]
+    assert_equal "root-9", step.input["thread_id"]
+  end
+
+  def test_a_conflicting_pinned_argument_is_refused_and_not_sent
+    run = start_run
+    with_channels_server(run: run, pins: { "channels_send_message" => { "jid" => "rec:town" } }) do |call|
+      reply = call.call("tools/call", { "name" => "send_message",
+                                         "arguments" => { "jid" => "rec:other", "text" => "x" } })
+      assert reply.dig("result", "isError")
+      assert_match(/jid is fixed for this run/, reply.dig("result", "content", 0, "text"))
+    end
+
+    assert_empty Recorder::SENT
+    step = Remuda::WorkflowStep.find_by(kind: "tool", name: "channels.send_message")
+    refute_nil step
+    assert_match(/jid is fixed for this run/, step.error)
+  end
+
+  def test_a_same_value_pinned_argument_is_allowed
+    with_channels_server(pins: { "channels_send_message" => { "jid" => "rec:town" } }) do |call|
+      reply = call.call("tools/call", { "name" => "send_message",
+                                         "arguments" => { "jid" => "rec:town", "text" => "x" } })
+      refute reply.dig("result", "isError")
+    end
+    assert_equal 1, Recorder::SENT.size
+  end
+
+  def test_the_agent_reads_a_thread_over_mcp_and_it_is_a_workflow_step
+    run = start_run
+    with_channels_server(run: run) do |call|
+      reply = call.call("tools/call", { "name" => "read_thread",
+                                         "arguments" => { "jid" => "rec:town", "thread_id" => "t-9", "limit" => 5 } })
+      refute reply.dig("result", "isError"), reply.dig("result", "content", 0, "text")
+      assert_equal "t-9", JSON.parse(reply.dig("result", "content", 0, "text")).dig("root", "id")
+    end
+
+    assert_equal [{ jid: "rec:town", thread_id: "t-9", limit: 5, before: nil }], Recorder::READ
+    step = Remuda::WorkflowStep.find_by(kind: "tool", name: "channels.read_thread")
+    refute_nil step
+    assert_equal "t-9", step.input["thread_id"]
+    assert_equal 0, step.output["omitted"]
+    assert step.output.key?("before")
+  end
+
+  # The whole point of pinning the thread: the agent can read where it was
+  # tagged, and cannot wander into another thread.
+  def test_a_pinned_thread_is_delivered_and_an_off_thread_call_is_refused_and_not_fetched
+    run = start_run
+    pins = { "channels_read_thread" => { "jid" => "rec:town", "thread_id" => "root-9" } }
+    with_channels_server(run: run, pins: pins) do |call|
+      ok = call.call("tools/call", { "name" => "read_thread", "arguments" => {} })
+      refute ok.dig("result", "isError"), ok.dig("result", "content", 0, "text")
+
+      off = call.call("tools/call", { "name" => "read_thread",
+                                        "arguments" => { "thread_id" => "root-other" } })
+      assert off.dig("result", "isError")
+      assert_match(/thread_id is fixed for this run/, off.dig("result", "content", 0, "text"))
+    end
+
+    assert_equal [{ jid: "rec:town", thread_id: "root-9", limit: 20, before: nil }], Recorder::READ
+  end
+
+  def test_read_thread_is_advertised_with_pinned_arguments_hidden
+    pins = { "channels_read_thread" => { "jid" => "rec:town", "thread_id" => "root-9" } }
+    with_channels_server(pins: pins) do |call|
+      tool = call.call("tools/list", {}).dig("result", "tools").find { |t| t["name"] == "read_thread" }
+      refute tool.dig("inputSchema", "properties").key?("jid")
+      refute tool.dig("inputSchema", "properties").key?("thread_id")
+      assert tool.dig("inputSchema", "properties").key?("before")
+      assert_match(/fixed/i, tool["description"])
+    end
+  end
+
   def test_the_bots_token_never_enters_the_container
     Dir.mktmpdir do |tmp|
       prompt = File.join(tmp, "prompt.txt")
@@ -202,9 +307,9 @@ class ChannelToolsTest < Minitest::Test
 
   private
 
-  def with_channels_server(run: nil)
+  def with_channels_server(run: nil, pins: {})
     Dir.mktmpdir do |tmp|
-      local = Remuda::ChannelsMcp.routes(@dir, run: run)
+      local = Remuda::ChannelsMcp.routes(@dir, run: run, pins: pins)
       Remuda::McpForwarder.open(@dir, tmp, local: local) do |path, _forwarder|
         url = URI(JSON.parse(File.read(path)).dig("mcpServers", "channels", "url").sub("host.docker.internal", "127.0.0.1"))
         id = 0

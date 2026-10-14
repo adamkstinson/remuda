@@ -72,6 +72,17 @@ Transports in the gem, bindings in the agent.
   the run, and attachments resolve from `/agent/...` to the agent directory
   on the host, never to `.env` or `.remuda/`. `Remuda.channels(dir)` stays the
   direct API for listeners.
+- **Reading a thread is a bounded tool.** `channels.read_thread(jid:,
+  thread_id:, limit: 20, before:)` returns one thread's root plus a newest
+  window of posts oldest-first, with `from_bot` on bot posts and attachment
+  names (never downloads). The host bounds it — `limit` 1-50, each post
+  truncated at 4k, ~16k of text per call, dropping the oldest and counting
+  them in `omitted` — and pages with a `before` cursor until `nil`. It is
+  what lets an agent that was tagged into a thread it has never seen catch up
+  without every prompt carrying the whole thread. Pinning `jid`/`thread_id`
+  (the `tools:` Hash form) scopes a run to the thread it was tagged in; a
+  conflicting call is refused before the transport is touched. Only
+  Mattermost implements it; Teams raises `NotImplementedError` for now.
 - **Inbound resolves to an invocation** through the same runner seam as
   workflows (a message-triggered `Remuda.agent` with conversation context), so
   channel-driven work is sandboxed and recorded like everything else.

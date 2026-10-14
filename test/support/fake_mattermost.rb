@@ -3,6 +3,7 @@
 require "digest/sha1"
 require "json"
 require "socket"
+require "uri"
 
 # A Mattermost stand-in on a local port: the REST calls the adapter makes, and
 # a websocket that sends hello and then whatever the test pushes. Server frames
@@ -12,7 +13,7 @@ class FakeMattermost
   BOT = { "id" => "bot-id", "username" => "ops", "is_bot" => true }.freeze
 
   attr_reader :port, :posts, :typing, :uploads, :client_frames, :upgrade_headers, :requests
-  attr_accessor :token, :channel_posts, :channels
+  attr_accessor :token, :channel_posts, :channels, :post_threads, :paginate_threads
 
   def initialize(token: "tok")
     @token = token
@@ -27,8 +28,14 @@ class FakeMattermost
     @sockets = Queue.new
     @channel_posts = {}
     @channels = nil # [{ "id", "name", "type" }] overrides the channel_posts-derived list
+    @post_threads = {} # thread root id => [post, ...]
+    @paginate_threads = false # when true, honor perPage/fromPost and report has_next
     @threads = []
     @accept = Thread.new { accept_loop }
+  end
+
+  def add_thread(thread_id, posts)
+    @post_threads[thread_id] = posts
   end
 
   def add_file(id:, name:, data:, mime_type: "image/jpeg")
@@ -67,15 +74,23 @@ class FakeMattermost
     @accept.kill
   end
 
-  def self.posted(id:, message:, channel_id: "ch-1", channel_type: "O", user_id: "u-adam",
-                  sender: "@adam", root_id: "", mentions: nil, followers: nil, props: {}, type: "",
-                  create_at: (Time.now.to_f * 1000).to_i, file_ids: [], files: nil)
+  def self.post_hash(id:, message:, channel_id: "ch-1", user_id: "u-adam", root_id: "", props: {},
+                     type: "", create_at: (Time.now.to_f * 1000).to_i, file_ids: [], files: nil)
     post = {
       "id" => id, "channel_id" => channel_id, "user_id" => user_id, "root_id" => root_id,
       "message" => message, "type" => type, "props" => props, "create_at" => create_at,
       "file_ids" => file_ids
     }
     post["metadata"] = { "files" => files } if files
+    post
+  end
+
+  def self.posted(id:, message:, channel_id: "ch-1", channel_type: "O", user_id: "u-adam",
+                  sender: "@adam", root_id: "", mentions: nil, followers: nil, props: {}, type: "",
+                  create_at: (Time.now.to_f * 1000).to_i, file_ids: [], files: nil)
+    post = post_hash(id: id, message: message, channel_id: channel_id, user_id: user_id,
+                     root_id: root_id, props: props, type: type, create_at: create_at,
+                     file_ids: file_ids, files: files)
     data = {
       "channel_type" => channel_type,
       "sender_name" => sender,
@@ -131,7 +146,15 @@ class FakeMattermost
     in ["GET", %r{\A/api/v4/channels/([^/]+)/posts\?since=}]
       posts = @channel_posts.fetch(path[%r{channels/([^/]+)/}, 1], [])
       reply(client, 200, { "order" => posts.map { _1["id"] }, "posts" => posts.to_h { [_1["id"], _1] } })
-    in ["GET", %r{\A/api/v4/users/([^/]+)\z}] then reply(client, 200, { "id" => path.split("/").last, "username" => "adam" })
+    in ["GET", %r{\A/api/v4/users/([^/]+)\z}]
+      id = path.split("/").last
+      reply(client, 200, id == BOT["id"] ? BOT : { "id" => id, "username" => "adam" })
+    in ["GET", %r{\A/api/v4/posts/([^/?]+)/thread(?:\?.*)?\z}]
+      reply(client, 200, thread_response(path[%r{posts/([^/?]+)/thread}, 1], parse_query(path)))
+    in ["GET", %r{\A/api/v4/posts/([^/?]+)\z}]
+      id = path.split("/").last
+      post = @post_threads.values.flatten.find { |candidate| candidate["id"] == id }
+      post ? reply(client, 200, post) : reply(client, 404, { "message" => "post not found" })
     in ["POST", "/api/v4/posts"]
       post = JSON.parse(body)
       @posts << post
@@ -158,6 +181,37 @@ class FakeMattermost
       reply(client, 201, { "file_infos" => infos, "client_ids" => [] })
     else reply(client, 404, { "message" => "no route #{verb} #{path}" })
     end
+  end
+
+  def parse_query(path)
+    query = path.split("?", 2)[1]
+    return {} if query.to_s.empty?
+
+    URI.decode_www_form(query).to_h
+  end
+
+  # A thread as the REST endpoint sees it: the whole thread by default, or one
+  # page when @paginate_threads is set.
+  def thread_response(thread_id, query)
+    posts = (@post_threads[thread_id] || []).sort_by { |post| post["create_at"].to_i }
+    unless @paginate_threads
+      return { "order" => posts.map { |post| post["id"] }, "posts" => posts.to_h { |post| [post["id"], post] },
+               "has_next" => false }
+    end
+
+    posts = older_than(posts, query["fromPost"]) if query["fromPost"]
+    per_page = query["perPage"].to_i
+    per_page = posts.size if per_page <= 0
+    window = posts.last(per_page)
+    { "order" => window.map { |post| post["id"] }, "posts" => window.to_h { |post| [post["id"], post] },
+      "has_next" => posts.size > window.size }
+  end
+
+  def older_than(posts, from_id)
+    boundary = posts.find { |post| post["id"] == from_id }
+    return posts unless boundary
+
+    posts.select { |post| post["create_at"].to_i < boundary["create_at"].to_i }
   end
 
   def reply(client, status, payload)
