@@ -25,9 +25,10 @@ the host. Two doors share one container definition:
   its own `.pi/` on top. Framework config vs app config. Today the profile is
   `image/pi-profile/pi`, first on `PATH` in both images: it loads the MCP
   client (`pi-mcp-adapter`, pinned in the Dockerfiles) and points it, in
-  exclusive mode, at `/run/remuda/mcp.json`. The agent has one MCP config,
-  `.mcp.json`, pi's own project file: `pi` on the host, `Remuda.tool`, and
-  the box all read it. In the box Pi reads this run's rewritten copy.
+  exclusive mode, at this run's copy of `.mcp.json`, named by
+  `REMUDA_MCP_CONFIG`. The agent has one MCP config, `.mcp.json`, pi's own
+  project file: `pi` on the host, `Remuda.tool`, and the box all read it. In
+  the box Pi reads this run's rewritten copy.
 - **Interactive and unattended share one sandbox posture.** Same image, same
   uid, same credential set, same HostConfig builder. `Remuda.agent` runs Pi
   with a prompt and exits; bare `remuda` allocates a TTY. Working on an agent
@@ -48,10 +49,13 @@ the host. Two doors share one container definition:
   do not. Do not source the agent's `.env` inside the image (agent-box did;
   we don't).
 - **`.mcp.json` is in the box, rewritten per run.** The runner mounts a
-  secret-free copy at `/run/remuda/mcp.json`, outside `/agent` so Docker never
-  creates a mount target in the agent's directory; servers that declare `headers`
-  point at a per-run host forwarder that adds them (see
-  [08-secrets](./08-secrets.md)). The host file is never rewritten.
+  secret-free copy over the agent's own `.mcp.json` (`/agent/.mcp.json`), so
+  the box and pi read one file and the host declaration is shadowed; servers
+  that declare `headers` point at a per-run host forwarder that adds them (see
+  [08-secrets](./08-secrets.md)). The host file is never rewritten. An agent
+  with no `.mcp.json` gets the copy at `/run/remuda/mcp.json` instead, because
+  Docker would create a root-owned mount target in the operator's directory
+  (#50); `REMUDA_MCP_CONFIG` tells the profile which one.
 - **No `--host` flag.** Unsandboxed Pi is `pi` in the directory yourself.
 - **Do not depend on `agentbox`.** Fold the proven bits (Engine API wait/reaper,
   prompt-as-file, cap-drop, read-only rootfs). Leave the multi-runtime registry,
@@ -128,7 +132,7 @@ The agent directory is not one writable “brain.”
 | `.remuda/workflows/` | `/agent/.remuda/workflows` | **ro** | rw |
 | prompt file | `/run/remuda/prompt.txt` | ro | — |
 | remuda Pi profile (`image/pi-profile/`) | in the image | ro | ro |
-| `.mcp.json` (per-run rewrite, see 08) | `/run/remuda/mcp.json` | ro, secret-free | ro, secret-free |
+| `.mcp.json` (per-run rewrite, see 08) | `/agent/.mcp.json`[^mcp] | ro, secret-free | ro, secret-free |
 | `.remuda/db/` | **not mounted** | | |
 | `.remuda/` as a whole | **not mounted** | | |
 | `.env` | **not mounted** | | |
@@ -139,6 +143,9 @@ present) is masked by `/dev/null`, `.remuda/` by an empty root-owned tmpfs,
 and `.remuda/workflows/` is bound back over that tmpfs with the door's write
 bit. Nothing is masked that does not exist on the host, because Docker would
 create the mount target in the operator's directory as root.
+
+[^mcp]: `/run/remuda/mcp.json` when the agent has no `.mcp.json` of its own;
+    `REMUDA_MCP_CONFIG` names whichever copy was mounted.
 
 Pi memory stays files. A jailbroken Pi can trash `files/` and `.pi/agent/`
 (including `auth.json`); it cannot rewrite run history or steal host MCP
@@ -164,7 +171,7 @@ staging dir (08). MCP tokens stay in `.env` + `.mcp.json`; channel tokens stay
 in `.env` + `.remuda/channels.yml`.
 
 Launcher also sets invocation env (`AGENT_PROMPT_FILE`, `AGENT_MODEL`,
-`AGENT_SESSION_ID`, `PI_CODING_AGENT_DIR`).
+`AGENT_SESSION_ID`, `PI_CODING_AGENT_DIR`, `REMUDA_MCP_CONFIG`).
 
 Network on in v0 (the model API has to be reached until the gateway takes it).
 `--network host` is a laptop shortcut for localhost MCP and a hole; default
