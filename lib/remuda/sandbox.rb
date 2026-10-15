@@ -130,7 +130,8 @@ module Remuda
         "Cmd" => cmd,
         "WorkingDir" => "/agent",
         "User" => "#{Process.uid}:#{Process.gid}",
-        "Env" => sandbox_env(agent_dir, "AGENT_PROMPT_FILE=/run/remuda/prompt.txt"),
+        "Env" => sandbox_env(agent_dir, "AGENT_PROMPT_FILE=/run/remuda/prompt.txt",
+                                      mcp_config: mcp_target(agent_dir, mcp_path)),
         "HostConfig" => {
           "Binds" => binds(
             agent_dir,
@@ -154,7 +155,7 @@ module Remuda
         "OpenStdin" => true,
         "WorkingDir" => "/agent",
         "User" => "#{Process.uid}:#{Process.gid}",
-        "Env" => sandbox_env(agent_dir),
+        "Env" => sandbox_env(agent_dir, mcp_config: mcp_target(agent_dir, mcp_path)),
         "HostConfig" => {
           "Binds" => binds(agent_dir, mcp_path: mcp_path, workflows_mode: "rw"),
           "CapDrop" => ["ALL"],
@@ -203,16 +204,24 @@ module Remuda
       args
     end
 
-    def self.sandbox_env(agent_dir, *extra)
+    def self.sandbox_env(agent_dir, *extra, mcp_config: nil)
       [
         "HOME=/tmp/home",
         "PI_CODING_AGENT_DIR=/agent/.pi/agent",
         "PI_TELEMETRY=0",
         *github_env(agent_dir),
+        *mcp_env(mcp_config),
         *extra
       ]
     end
     private_class_method :sandbox_env
+
+    # The Pi profile reads this instead of a hardcoded path, so it points at
+    # whichever copy the runner mounted for this run, or at nothing.
+    def self.mcp_env(mcp_config)
+      mcp_config ? ["REMUDA_MCP_CONFIG=#{mcp_config}"] : []
+    end
+    private_class_method :mcp_env
 
     def self.github_env(agent_dir)
       vars = Directory.env_vars(agent_dir)
@@ -286,7 +295,9 @@ module Remuda
     private_class_method :policy_for
 
     # Only mask what exists: Docker creates a missing mount target, and in a
-    # bind-mounted directory that is a root-owned file on the host.
+    # bind-mounted directory that is a root-owned file on the host. The run
+    # copy goes over the agent's own .mcp.json when it has one (pi's project
+    # path, so box and pi read one file), and beside the prompt otherwise.
     def self.binds(agent_dir, prompt_path: nil, mcp_path: nil, workflows_mode: "rw")
       agent_dir = File.expand_path(agent_dir)
       mounts = ["#{agent_dir}:/agent:rw"]
@@ -294,12 +305,22 @@ module Remuda
       workflows = File.join(agent_dir, ".remuda", "workflows")
       mounts << "#{workflows}:/agent/.remuda/workflows:#{workflows_mode}" if File.directory?(workflows)
       mounts << "#{prompt_path}:/run/remuda/prompt.txt:ro" if prompt_path
-      # Beside the prompt, not in /agent: the agent may have no .mcp.json, and
-      # Docker would create a root-owned mount target in its directory (#50).
-      mounts << "#{mcp_path}:#{Mcp::RUN_CONFIG}:ro" if mcp_path
+      target = mcp_target(agent_dir, mcp_path)
+      mounts << "#{mcp_path}:#{target}:ro" if target
       mounts.concat(Mounts.for(agent_dir))
     end
     private_class_method :binds
+
+    def self.mcp_target(agent_dir, mcp_path)
+      return nil if mcp_path.nil? || mcp_path.to_s.empty?
+
+      if File.file?(File.join(File.expand_path(agent_dir), Mcp::CONFIG))
+        Mcp::AGENT_CONFIG
+      else
+        Mcp::RUN_CONFIG
+      end
+    end
+    private_class_method :mcp_target
 
     def self.decode_logs(raw)
       raw = raw.to_s.b

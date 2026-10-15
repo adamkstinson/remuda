@@ -260,8 +260,10 @@ own tools. Without it Pi reaches them through one `mcp` proxy tool.
 
 The sandbox reaches MCP servers that declare `headers` through a per-run
 forwarder on the host. `.mcp.json` stays the declaration and is not changed on
-disk. For each run Remuda writes a copy and mounts it read-only at
-`/run/remuda/mcp.json`, beside the prompt and outside `/agent`:
+disk. For each run Remuda writes a copy and mounts it read-only over the
+agent's own `.mcp.json` (`/agent/.mcp.json`), so the box and `pi` read one
+file; an agent with no `.mcp.json` gets the copy at `/run/remuda/mcp.json`,
+beside the prompt, instead. `REMUDA_MCP_CONFIG` names whichever was mounted:
 
 - a server with `headers` points at
   `http://host.docker.internal:<port>/<run token>/<server>` and carries no

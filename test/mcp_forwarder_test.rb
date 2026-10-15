@@ -256,6 +256,9 @@ class McpForwarderTest < Minitest::Test
     end
   end
 
+  # The agent's own .mcp.json is pi's project config, so the run copy is
+  # mounted over it: the box and pi read one file, and the host declaration is
+  # shadowed by the secret-free copy.
   def test_batch_and_interactive_mount_the_rewritten_file_read_only
     Dir.mktmpdir do |tmp|
       prompt = File.join(tmp, "prompt.txt")
@@ -265,17 +268,48 @@ class McpForwarderTest < Minitest::Test
       dummy = File.expand_path("dummy", __dir__)
 
       batch = Remuda::Sandbox.batch_spec(dummy, prompt_path: prompt, mcp_path: mcp)
-      assert_includes batch.dig("HostConfig", "Binds"), "#{mcp}:/run/remuda/mcp.json:ro"
+      assert_includes batch.dig("HostConfig", "Binds"), "#{mcp}:/agent/.mcp.json:ro"
 
       interactive = Remuda::Sandbox.interactive_spec(dummy, mcp_path: mcp)
-      assert_includes interactive.dig("HostConfig", "Binds"), "#{mcp}:/run/remuda/mcp.json:ro"
+      assert_includes interactive.dig("HostConfig", "Binds"), "#{mcp}:/agent/.mcp.json:ro"
       args = Remuda::Sandbox.attach_args(dummy, mcp_path: mcp)
-      assert args.each_cons(2).any? { |a, b| a == "-v" && b == "#{mcp}:/run/remuda/mcp.json:ro" }, args.inspect
+      assert args.each_cons(2).any? { |a, b| a == "-v" && b == "#{mcp}:/agent/.mcp.json:ro" }, args.inspect
     end
   end
 
-  # #50: the per-run copy lives outside /agent. Mounting it at a path the agent
-  # directory does not have makes Docker create a root-owned file there.
+  # The Pi profile reads $REMUDA_MCP_CONFIG, not a hardcoded path, so the env
+  # names whichever file the runner mounted this run.
+  def test_sandbox_env_names_the_mounted_mcp_config
+    Dir.mktmpdir do |tmp|
+      prompt = File.join(tmp, "prompt.txt")
+      mcp = File.join(tmp, ".mcp.json")
+      File.write(prompt, "hi")
+      File.write(mcp, "{}")
+      dummy = File.expand_path("dummy", __dir__)
+
+      batch = Remuda::Sandbox.batch_spec(dummy, prompt_path: prompt, mcp_path: mcp)
+      assert_includes batch["Env"], "REMUDA_MCP_CONFIG=/agent/.mcp.json"
+
+      # No project file: the run copy goes to the fallback outside /agent.
+      Dir.mktmpdir("remuda-agent") do |dir|
+        batch = Remuda::Sandbox.batch_spec(dir, prompt_path: prompt, mcp_path: mcp)
+        assert_includes batch["Env"], "REMUDA_MCP_CONFIG=/run/remuda/mcp.json"
+      end
+    end
+  end
+
+  def test_no_mcp_path_means_no_mcp_config_env
+    Dir.mktmpdir do |tmp|
+      prompt = File.join(tmp, "prompt.txt")
+      File.write(prompt, "hi")
+      batch = Remuda::Sandbox.batch_spec(File.expand_path("dummy", __dir__), prompt_path: prompt)
+      refute batch["Env"].any? { |env| env.start_with?("REMUDA_MCP_CONFIG=") }
+    end
+  end
+
+  # #50: mounting over a path the agent directory does not have makes Docker
+  # create a root-owned file there. Without a project file the copy goes to the
+  # fallback, so every /agent/ bind target exists on the host.
   def test_no_bind_targets_a_missing_path_inside_the_agent_directory
     Dir.mktmpdir do |dir|
       Dir.mktmpdir do |tmp|
@@ -285,7 +319,9 @@ class McpForwarderTest < Minitest::Test
         File.write(mcp, "{}")
         [Remuda::Sandbox.batch_spec(dir, prompt_path: prompt, mcp_path: mcp),
          Remuda::Sandbox.interactive_spec(dir, mcp_path: mcp)].each do |spec|
-          spec.dig("HostConfig", "Binds").each do |bind|
+          binds = spec.dig("HostConfig", "Binds")
+          assert_includes binds, "#{mcp}:/run/remuda/mcp.json:ro"
+          binds.each do |bind|
             source, target = bind.split(":")
             next unless target.start_with?("/agent/")
             next if source == "/dev/null" # masks only exist when the file does

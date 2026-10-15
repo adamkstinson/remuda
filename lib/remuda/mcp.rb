@@ -12,6 +12,10 @@ module Remuda
     # from the agent .env, then the process env.
     CONFIG = ".mcp.json"
     # Where the box reads this run's rewritten copy (image/pi-profile/pi).
+    # Normally the project path, so the box and pi read one file; RUN_CONFIG is
+    # the fallback for an agent with no .mcp.json, where mounting over the
+    # project path would make Docker create a root-owned file there (#50).
+    AGENT_CONFIG = "/agent/.mcp.json"
     RUN_CONFIG = "/run/remuda/mcp.json"
     PLACEHOLDER = /\$\{(\w+)\}/
 

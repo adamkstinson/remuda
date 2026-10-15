@@ -21,16 +21,26 @@ class PiProfileTest < Minitest::Test
     end
   end
 
-  def test_profile_loads_the_client_and_reads_only_the_agents_mcp_json
-    with_shim(mcp_json: true) do |run|
+  def test_profile_reads_the_mount_named_by_remuda_mcp_config
+    with_shim(mcp_config: :agent) do |run|
       out = run.call("--mode", "json", "--print")
-      assert_equal "-e /adapter --mcp-config RUN/mcp.json --mode json --print", out[:args]
+      assert_equal "-e /adapter --mcp-config AGENT/.mcp.json --mode json --print", out[:args]
       assert_equal "exclusive", out[:mode]
     end
   end
 
-  def test_profile_without_mcp_json_still_loads_the_client
-    with_shim(mcp_json: false) do |run|
+  def test_profile_reads_the_fallback_copy_when_the_agent_has_no_project_file
+    with_shim(mcp_config: :run) do |run|
+      out = run.call("--print")
+      assert_equal "-e /adapter --mcp-config RUN/mcp.json --print", out[:args]
+      assert_equal "exclusive", out[:mode]
+    end
+  end
+
+  # Without the env the profile must not point Pi at any file: the agent's own
+  # .mcp.json may hold literal secrets. Read only what the runner mounted.
+  def test_profile_without_the_env_ignores_the_agents_own_mcp_json
+    with_shim(mcp_config: nil) do |run|
       out = run.call("--print")
       assert_equal "-e /adapter --print", out[:args]
       assert_equal "", out[:mode]
@@ -38,7 +48,7 @@ class PiProfileTest < Minitest::Test
   end
 
   def test_profile_passes_pi_subcommands_through_untouched
-    with_shim(mcp_json: true) do |run|
+    with_shim(mcp_config: :agent) do |run|
       assert_equal "list", run.call("list")[:args]
       assert_equal "auth status", run.call("auth", "status")[:args]
     end
@@ -47,29 +57,32 @@ class PiProfileTest < Minitest::Test
   private
 
   # Run the real shim with its fixed paths pointed at a temp dir and a fake
-  # pi that prints its argv and PI_MCP_CONFIG_MODE.
-  def with_shim(mcp_json:)
+  # pi that prints its argv and PI_MCP_CONFIG_MODE. REMUDA_MCP_CONFIG is what
+  # the runner sets: the mounted project file, the fallback copy, or unset.
+  def with_shim(mcp_config:)
     Dir.mktmpdir("pi-profile") do |dir|
       agent = File.join(dir, "agent")
       FileUtils.mkdir_p(agent)
       run_dir = File.join(dir, "run")
       FileUtils.mkdir_p(run_dir)
-      # The agent's own .mcp.json is not what the box reads: only the per-run copy.
       File.write(File.join(agent, ".mcp.json"), "{}")
-      File.write(File.join(run_dir, "mcp.json"), "{}") if mcp_json
+      File.write(File.join(run_dir, "mcp.json"), "{}")
       fake = File.join(dir, "fake-pi")
       File.write(fake, "#!/bin/sh\necho \"$*\"\necho \"${PI_MCP_CONFIG_MODE:-}\"\n")
       File.chmod(0o755, fake)
       shim = File.join(dir, "pi")
       File.write(shim, File.read(SHIM)
         .gsub("/usr/local/bin/pi", fake)
-        .gsub("/usr/local/lib/node_modules/pi-mcp-adapter", "/adapter")
-        .gsub("/agent/", "#{agent}/")
-        .gsub("/run/remuda/", "#{run_dir}/"))
+        .gsub("/usr/local/lib/node_modules/pi-mcp-adapter", "/adapter"))
       File.chmod(0o755, shim)
 
+      config = case mcp_config
+      when :agent then File.join(agent, ".mcp.json")
+      when :run then File.join(run_dir, "mcp.json")
+      else mcp_config
+      end
       run = lambda do |*args|
-        stdout, status = Open3.capture2({ "PI_MCP_CONFIG_MODE" => nil }, shim, *args)
+        stdout, status = Open3.capture2({ "REMUDA_MCP_CONFIG" => config, "PI_MCP_CONFIG_MODE" => nil }, shim, *args)
         assert status.success?
         lines = stdout.lines.map(&:chomp)
         { args: lines[0].sub(agent, "AGENT").sub(run_dir, "RUN"), mode: lines[1].to_s }
