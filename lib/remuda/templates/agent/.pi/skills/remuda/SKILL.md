@@ -170,6 +170,10 @@ Pi's full transcripts are in `.pi/agent/sessions/`.
 ## Rules
 
 - Secrets go in `.env` only. `.mcp.json` uses `${VAR}`, never the value.
+- OAuth MCP servers (Gmail, etc.) authenticate from inside the interactive
+  session: `mcp({action:"auth-start", server:"<name>"})`. The token is stored
+  encrypted at `.pi/agent/mcp-oauth-encrypted/`, keyed by
+  `PI_MCP_ADAPTER_OAUTH_FILE_KEY` from `.env`. That directory is gitignored.
 - Ruby helpers go in `.remuda/workflows/lib/`, never `app/` or `lib/` at the
   root. Agent memory goes in `files/`. Never copy gem code into the directory.
 - Do not add database tables. Harness state is rows; agent memory is files.

@@ -36,6 +36,52 @@ class SandboxAuthTest < Minitest::Test
     refute env.any? { |e| e.include?("/tmp/pi") }, env.inspect
   end
 
+  def test_oauth_file_key_injected_from_dot_env
+    Dir.mktmpdir("remuda-oauth") do |dir|
+      File.write(File.join(dir, ".env"), "PI_MCP_ADAPTER_OAUTH_FILE_KEY=test_key_value\n")
+      spec = Remuda::Sandbox.interactive_spec(dir)
+      assert_includes Array(spec["Env"]), "PI_MCP_ADAPTER_OAUTH_FILE_KEY=test_key_value"
+    end
+  end
+
+  def test_oauth_file_key_absent_without_dot_env
+    Dir.mktmpdir("remuda-oauth") do |dir|
+      spec = Remuda::Sandbox.interactive_spec(dir)
+      refute Array(spec["Env"]).any? { |e| e.start_with?("PI_MCP_ADAPTER_OAUTH_FILE_KEY=") }, spec["Env"].inspect
+    end
+  end
+
+  def test_oauth_file_key_not_read_from_process_env
+    Dir.mktmpdir("remuda-oauth") do |dir|
+      ENV["PI_MCP_ADAPTER_OAUTH_FILE_KEY"] = "from_process_env"
+      spec = Remuda::Sandbox.interactive_spec(dir)
+      refute Array(spec["Env"]).any? { |e| e.start_with?("PI_MCP_ADAPTER_OAUTH_FILE_KEY=") }, spec["Env"].inspect
+    ensure
+      ENV.delete("PI_MCP_ADAPTER_OAUTH_FILE_KEY")
+    end
+  end
+
+  def test_oauth_file_key_in_attach_args
+    Dir.mktmpdir("remuda-oauth") do |dir|
+      File.write(File.join(dir, ".env"), "PI_MCP_ADAPTER_OAUTH_FILE_KEY=test_key_value\n")
+      args = Remuda::Sandbox.attach_args(dir)
+      pairs = args.each_cons(2).select { |a, _| a == "-e" }.map(&:last)
+      assert_includes pairs, "PI_MCP_ADAPTER_OAUTH_FILE_KEY=test_key_value"
+    end
+  end
+
+  def test_oauth_file_key_in_batch_spec
+    Dir.mktmpdir("remuda-oauth") do |dir|
+      File.write(File.join(dir, ".env"), "PI_MCP_ADAPTER_OAUTH_FILE_KEY=test_key_value\n")
+      Dir.mktmpdir("remuda-prompt") do |prompt_dir|
+        prompt = File.join(prompt_dir, "prompt.txt")
+        File.write(prompt, "hi")
+        spec = Remuda::Sandbox.batch_spec(dir, prompt_path: prompt)
+        assert_includes Array(spec["Env"]), "PI_MCP_ADAPTER_OAUTH_FILE_KEY=test_key_value"
+      end
+    end
+  end
+
   private
 
   def dummy_batch_spec
