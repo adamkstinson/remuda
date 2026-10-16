@@ -161,6 +161,11 @@ checks) is fleet/runbook territory. Remuda only aims the box at the tuple.
 - Laptop / v0 model auth: per-agent `.pi/agent/auth.json` (Pi user dir mapped
   into the sandbox). Not the client path — clients get model keys at the edge
   too.
+- OAuth MCP tokens for the sandbox: `pi-mcp-adapter`'s `encrypted-file` store
+  under `.pi/agent/`, keyed by `PI_MCP_ADAPTER_OAUTH_FILE_KEY` injected from
+  the host `.env`. The OAuth flow runs from inside the interactive session;
+  the gateway is still the client path. This is the laptop/v0 path, not a
+  replacement for the gateway.
 
 ## Open (later)
 

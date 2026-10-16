@@ -210,6 +210,7 @@ module Remuda
         "PI_CODING_AGENT_DIR=/agent/.pi/agent",
         "PI_TELEMETRY=0",
         *github_env(agent_dir),
+        *oauth_env(agent_dir),
         *mcp_env(mcp_config),
         *extra
       ]
@@ -238,6 +239,19 @@ module Remuda
       ]
     end
     private_class_method :github_env
+
+    # pi-mcp-adapter's encrypted-file OAuth store reads its key only from this
+    # env var. The token files live under /agent/.pi/agent/mcp-oauth-encrypted,
+    # which is already mounted; nothing else is needed for OAuth MCP in the box.
+    OAUTH_FILE_KEY = "PI_MCP_ADAPTER_OAUTH_FILE_KEY"
+
+    def self.oauth_env(agent_dir)
+      value = Directory.env_vars(agent_dir)[OAUTH_FILE_KEY]
+      return [] if value.nil? || value.empty?
+
+      ["#{OAUTH_FILE_KEY}=#{value}"]
+    end
+    private_class_method :oauth_env
 
     # Pi session ids are UUIDs; anything else must not reach a command line.
     def self.valid_session_id?(value)
