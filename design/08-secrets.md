@@ -78,7 +78,7 @@ and host `Remuda.tool` still calls the real URL.
 **OAuth-declared MCP (laptop path).** A server declared `"auth": "oauth"` in
 `.mcp.json` (pi-mcp-adapter's syntax) is handled like a header server. The
 human connects once with the adapter (`/mcp-auth <server>`) with
-`oauthCredentialStore: "encrypted-file"`. The tokens land in
+`settings.oauthCredentialStore: "encrypted-file"` in `.mcp.json`. The tokens land in
 `.pi/agent/mcp-oauth-encrypted/`, AES-256-GCM under
 `PI_MCP_ADAPTER_OAUTH_FILE_KEY` from `.env`. On the host, `Remuda::McpOAuth`
 reads that store, refreshes near expiry, writes back in the adapter's format,
