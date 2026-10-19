@@ -12,7 +12,7 @@ module Remuda
       Mcp.list(
         url,
         token: env_token(agent_dir, server),
-        headers: server_headers(agent_dir, spec)
+        headers: server_headers(agent_dir, spec, server)
       ).map do |tool|
         {
           server: server,
@@ -65,7 +65,7 @@ module Remuda
           name,
           args,
           token: env_token(agent_dir, server),
-          headers: server_headers(agent_dir, spec)
+          headers: server_headers(agent_dir, spec, server)
         )
       )
     rescue StandardError => e
@@ -104,8 +104,10 @@ module Remuda
     mcp_url(agent_dir, server)
   end
 
-  def self.server_headers(agent_dir, spec)
+  # ${VAR} headers from .env then ENV; an OAuth server's stored token (McpOAuth).
+  def self.server_headers(agent_dir, spec, server = nil)
     return {} unless spec.is_a?(Hash)
+    return McpOAuth.headers(agent_dir, server, spec) if server && McpOAuth.oauth?(agent_dir, server, spec)
 
     headers = spec["headers"]
     return {} unless headers.is_a?(Hash)

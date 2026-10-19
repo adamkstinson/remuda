@@ -274,13 +274,53 @@ beside the prompt, instead. `REMUDA_MCP_CONFIG` names whichever was mounted:
 - a declared variable with no value is not sent blank. The forwarder answers
   that server with `401` and names the missing variable.
 
-A token the workflow sets on the process before `Remuda.agent` (for example a
-refreshed `GMAIL_MCP_TOKEN`) reaches the forwarder the same way. The forwarder
+A variable the workflow sets on the process before `Remuda.agent` reaches the
+forwarder the same way. The forwarder
 starts with the container and stops when it exits, for `Remuda.agent` and for
 interactive `remuda`. It listens on the Docker bridge address, and every path
 starts with a random token only that run's `.mcp.json` holds. `.env` is still
 never mounted. On a host with a firewall (ufw), allow the bridge in
 (`ufw allow in on docker0`) or the box cannot reach the forwarder.
+
+#### OAuth MCP servers
+
+A server that signs in with OAuth (Gmail, Calendar) is declared in
+`.mcp.json` the way pi-mcp-adapter declares it, and handled on the host like a
+`${VAR}` header:
+
+```json
+"gmail": {
+  "url": "https://gmailmcp.googleapis.com/mcp/v1",
+  "auth": "oauth",
+  "oauth": {
+    "clientId": "1234.apps.googleusercontent.com",
+    "clientSecret": "${GOOGLE_OAUTH_CLIENT_SECRET}",
+    "scope": "https://www.googleapis.com/auth/gmail.readonly",
+    "authorizationParams": { "access_type": "offline", "prompt": "consent" }
+  }
+}
+```
+
+The tokens live in pi-mcp-adapter's `encrypted-file` store,
+`.pi/agent/mcp-oauth-encrypted/` (gitignored), encrypted with
+`PI_MCP_ADAPTER_OAUTH_FILE_KEY` from `.env`. Set
+`"oauthCredentialStore": "encrypted-file"` in `.pi/agent/settings.json` (new
+agents have it). Connect once with the adapter, on the host, as this agent:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"  # key, once, into .env
+env $(grep -E '^(PI_MCP_ADAPTER_OAUTH_FILE_KEY|GOOGLE_OAUTH_CLIENT_SECRET)=' .env | xargs) \
+  PI_CODING_AGENT_DIR=$PWD/.pi/agent pi -e ~/.pi/agent/npm/node_modules/pi-mcp-adapter
+# then, in pi:  /mcp-auth gmail
+```
+
+After that `Remuda.tool`, `Remuda.agent`, channel replies, and interactive
+`remuda` all reach the server. Remuda reads the store, refreshes the access
+token when it is within five minutes of expiry (writing it back in the
+adapter's format), and sends `Authorization: Bearer`. The box's copy of the
+server points at the forwarder with `"auth": false`; the key and the token
+never enter the container. A server with no key, or not connected, gets a
+`401` that names the fix.
 
 ## Channels
 

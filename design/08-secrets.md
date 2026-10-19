@@ -75,6 +75,19 @@ credential). This is not the TLS-intercept gateway below; it is the small
 answer for URLs we are allowed to rewrite. The host `.mcp.json` is unchanged
 and host `Remuda.tool` still calls the real URL.
 
+**OAuth-declared MCP (laptop path).** A server declared `"auth": "oauth"` in
+`.mcp.json` (pi-mcp-adapter's syntax) is handled like a header server. The
+human connects once with the adapter (`/mcp-auth <server>`) with
+`oauthCredentialStore: "encrypted-file"`. The tokens land in
+`.pi/agent/mcp-oauth-encrypted/`, AES-256-GCM under
+`PI_MCP_ADAPTER_OAUTH_FILE_KEY` from `.env`. On the host, `Remuda::McpOAuth`
+reads that store, refreshes near expiry, writes back in the adapter's format,
+and supplies `Authorization: Bearer`, per forwarder request and per
+`Remuda.tool` call. The box's copy sets `"auth": false`, so the adapter in the
+box never authenticates. The ciphertext sits in the mounted Pi dir, but the
+key is never injected, so the box cannot read it. Missing key or credentials
+answer `401` with the fix.
+
 **Self-hosted MCP** is the same shape without a proxy: the MCP server holds
 the service credential; the caller reaches an endpoint. The gateway
 generalizes that to SaaS we don't host (Gmail, QuickBooks). Both are
@@ -155,9 +168,12 @@ checks) is fleet/runbook territory. Remuda only aims the box at the tuple.
   proxy wiring in the image. Ship that wiring as if all sandbox HTTPS will go
   through the gateway.
 - Secret-free `.mcp.json`. Self-hosted MCP is the same shape for services we own.
-- Third-party SaaS tokens never live in the agent directory.
+- Third-party SaaS tokens never live in the agent directory in the clear.
+  The laptop OAuth store is ciphertext under `.pi/agent/`, keyed from `.env`.
 - OAuth is human-performed, vault-stored, auto-refreshed. Agents cannot
-  self-authorize.
+  self-authorize. On the laptop path the vault is pi-mcp-adapter's
+  encrypted-file store in the agent's Pi dir, keyed from `.env`; Remuda
+  refreshes and injects on the host, and the box gets `"auth": false`.
 - Laptop / v0 model auth: per-agent `.pi/agent/auth.json` (Pi user dir mapped
   into the sandbox). Not the client path — clients get model keys at the edge
   too.
