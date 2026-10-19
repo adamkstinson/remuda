@@ -1,4 +1,5 @@
 .env
 .pi/agent/auth.json
+.pi/agent/mcp-oauth-encrypted/
 .pi/auth.json
 .remuda/db/

@@ -171,6 +171,89 @@ class McpForwarderTest < Minitest::Test
     end
   end
 
+  # --- OAuth servers --------------------------------------------------------
+
+  OAUTH_KEY = ["k" * 32].pack("m0")
+
+  def with_oauth_agent(expires_at: Time.now.to_i + 3600)
+    Dir.mktmpdir("remuda-agent") do |dir|
+      File.write(File.join(dir, ".env"), "PI_MCP_ADAPTER_OAUTH_FILE_KEY=#{OAUTH_KEY}\n")
+      Remuda::McpOAuth.write(dir, "gmail", {
+        "tokens" => { "accessToken" => "oauth-access", "refreshToken" => "r", "expiresAt" => expires_at },
+        "clientInfo" => { "clientId" => "cid" }
+      })
+      yield dir
+    end
+  end
+
+  OAUTH_CONFIG = {
+    "mcpServers" => {
+      "gmail" => { "url" => "https://gmailmcp.example.com/mcp/v1", "auth" => "oauth",
+                   "oauth" => { "clientId" => "cid", "clientSecret" => "csec" } }
+    }
+  }.freeze
+
+  def test_oauth_servers_point_at_the_forwarder_with_auth_off_and_no_client_secret
+    with_oauth_agent do |dir|
+      config, routes = Remuda::McpForwarder.plan(OAUTH_CONFIG, vars: {}, base_url: BASE, agent_dir: dir)
+      gmail = config.dig("mcpServers", "gmail")
+      assert_equal "#{BASE}/gmail", gmail["url"]
+      assert_equal false, gmail["auth"]
+      refute gmail.key?("oauth")
+      refute_includes JSON.generate(config), "csec"
+      assert_equal "https://gmailmcp.example.com/mcp/v1", routes["gmail"].upstream
+      assert_equal({ "Authorization" => "Bearer oauth-access" }, routes["gmail"].current_headers)
+    end
+  end
+
+  def test_header_servers_in_the_box_have_auth_off_too
+    config, = plan
+    assert_equal false, config.dig("mcpServers", "plane", "auth")
+  end
+
+  def test_proxy_injects_the_stored_oauth_token
+    seen = {}
+    upstream = serve_upstream do |client, request|
+      seen.merge!(request)
+      client.write("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+    end
+    with_oauth_agent do |dir|
+      config = { "mcpServers" => { "gmail" => { "url" => "http://127.0.0.1:#{upstream[:port]}/mcp", "auth" => "oauth" } } }
+      _, routes = Remuda::McpForwarder.plan(config, vars: {}, base_url: BASE, agent_dir: dir)
+      forwarder = Remuda::McpForwarder.new(routes, token: "tok", bind: "127.0.0.1").start
+      begin
+        response = Net::HTTP.post(URI("http://127.0.0.1:#{forwarder.port}/tok/gmail"), "{}")
+        assert_equal "200", response.code
+        assert_equal "Bearer oauth-access", seen[:headers]["authorization"]
+      ensure
+        forwarder.stop
+      end
+    end
+  ensure
+    upstream[:server].close
+  end
+
+  def test_proxy_answers_401_naming_the_fix_when_oauth_is_not_connected
+    hits = 0
+    upstream = serve_upstream { |_c, _r| hits += 1 }
+    Dir.mktmpdir("remuda-agent") do |dir|
+      File.write(File.join(dir, ".env"), "PI_MCP_ADAPTER_OAUTH_FILE_KEY=#{OAUTH_KEY}\n")
+      config = { "mcpServers" => { "gmail" => { "url" => "http://127.0.0.1:#{upstream[:port]}/mcp", "auth" => "oauth" } } }
+      _, routes = Remuda::McpForwarder.plan(config, vars: {}, base_url: BASE, agent_dir: dir)
+      forwarder = Remuda::McpForwarder.new(routes, token: "tok", bind: "127.0.0.1").start
+      begin
+        response = Net::HTTP.post(URI("http://127.0.0.1:#{forwarder.port}/tok/gmail"), "{}")
+        assert_equal "401", response.code
+        assert_includes response.body, "/mcp-auth gmail"
+        assert_equal 0, hits
+      ensure
+        forwarder.stop
+      end
+    end
+  ensure
+    upstream[:server].close
+  end
+
   def test_proxy_refuses_a_request_without_the_run_token
     forwarder = Remuda::McpForwarder.new({}, token: "tok", bind: "127.0.0.1").start
     begin

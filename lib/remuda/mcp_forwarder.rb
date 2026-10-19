@@ -30,9 +30,15 @@ module Remuda
 
     # A route forwards to upstream with headers, or, with a handler, is
     # answered in-process (handler.call(method, body) -> [status, headers, body]).
-    Route = Data.define(:name, :upstream, :headers, :missing, :handler) do
-      def initialize(name:, upstream: nil, headers: {}, missing: [], handler: nil)
+    # auth, when set, is called per request for headers that change (an OAuth
+    # access token); it raises McpOAuth::Unavailable to fail closed.
+    Route = Data.define(:name, :upstream, :headers, :missing, :handler, :auth) do
+      def initialize(name:, upstream: nil, headers: {}, missing: [], handler: nil, auth: nil)
         super
+      end
+
+      def current_headers
+        auth ? headers.merge(auth.call) : headers
       end
     end
 
@@ -53,7 +59,8 @@ module Remuda
         agent_config, routes = plan(
           config,
           vars: Directory.env_vars(agent_dir),
-          base_url: "http://#{CONTAINER_HOST}:#{forwarder.port}/#{token}"
+          base_url: "http://#{CONTAINER_HOST}:#{forwarder.port}/#{token}",
+          agent_dir: agent_dir
         )
         add_local(agent_config, routes, local, "http://#{CONTAINER_HOST}:#{forwarder.port}/#{token}")
         forwarder.routes = routes
@@ -91,13 +98,23 @@ module Remuda
     end
     private_class_method :add_local
 
-    # Pure: the agent's copy of .mcp.json and the forwarder's route table.
-    def self.plan(config, vars:, base_url:, env: ENV)
+    # The box's copy of a forwarded server: the forwarder's URL, and nothing
+    # that would make the adapter in the box authenticate on its own.
+    BOX_DROPS = %w[headers tailscale_url oauth bearerToken bearerTokenEnv bearerTokenStore requestHeadersCommand].freeze
+
+    # The agent's copy of .mcp.json and the forwarder's route table. Pure
+    # unless agent_dir is given, which turns on OAuth servers (McpOAuth).
+    def self.plan(config, vars:, base_url:, env: ENV, agent_dir: nil)
       config = config.is_a?(Hash) ? config : {}
       routes = {}
       servers = (config["mcpServers"] || {}).to_h do |name, spec|
         headers = spec.is_a?(Hash) ? spec["headers"] : nil
         url = spec.is_a?(Hash) ? Mcp.resolve_url(spec) : nil
+        if url && agent_dir && McpOAuth.oauth?(agent_dir, name, spec)
+          oauth = -> { McpOAuth.headers(agent_dir, name, spec) }
+          routes[name] = Route.new(name: name, upstream: Mcp.host_url(url), auth: oauth)
+          next [name, box_spec(spec, "#{base_url}/#{name}")]
+        end
         if !headers.is_a?(Hash) || headers.empty? || url.nil?
           next [name, spec] unless url
 
@@ -106,9 +123,13 @@ module Remuda
 
         filled, missing = fill(headers, vars, env)
         routes[name] = Route.new(name: name, upstream: Mcp.host_url(url), headers: filled, missing: missing)
-        [name, spec.except("headers", "tailscale_url").merge("url" => "#{base_url}/#{name}")]
+        [name, box_spec(spec, "#{base_url}/#{name}")]
       end
       [config.merge("mcpServers" => servers), routes]
+    end
+
+    def self.box_spec(spec, url)
+      spec.except(*BOX_DROPS).merge("url" => url, "auth" => false)
     end
 
     # Same rule as Remuda.tool: the agent .env, then the process env. A
@@ -206,7 +227,12 @@ module Remuda
 
       return answer(socket, route, method, headers) if route.handler
 
-      forward(socket, route, method, rest, headers, sent)
+      begin
+        upstream_headers = route.current_headers
+      rescue McpOAuth::Unavailable => e
+        return respond(socket, 401, "remuda forwarder: #{e.message}\n")
+      end
+      forward(socket, route, upstream_headers, method, rest, headers, sent)
     rescue StandardError => e
       @logger&.puts("remuda forwarder: #{route&.name || "request"} failed: #{e.class}")
       respond(socket, 502, "remuda forwarder: upstream failed (#{e.class})\n") unless sent[:head]
@@ -238,7 +264,7 @@ module Remuda
       [route, ["/#{rest}".delete_suffix("/"), query]]
     end
 
-    def forward(socket, route, method, (rest, query), headers, sent)
+    def forward(socket, route, upstream_headers, method, (rest, query), headers, sent)
       uri = URI(route.upstream)
       uri.path = "#{uri.path.delete_suffix("/")}#{rest}"
       uri.path = "/" if uri.path.empty?
@@ -253,7 +279,7 @@ module Remuda
 
         request[key] = value
       end
-      route.headers.each { |key, value| request[key] = value }
+      upstream_headers.each { |key, value| request[key] = value }
       attach_body(request, socket, headers)
 
       Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",

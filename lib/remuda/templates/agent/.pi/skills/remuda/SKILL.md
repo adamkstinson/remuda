@@ -110,7 +110,11 @@ Then `remuda run triage`, and look at the result in `remuda console`.
 
 **`Remuda.tool("server.tool", **args)`** is an MCP call on the host with the
 operator's credentials. The server comes from `.mcp.json`. Header
-`${VAR}`s fill from `.env`, then `ENV`. `SERVER_MCP_TOKEN` / `MCP_TOKEN` in
+`${VAR}`s fill from `.env`, then `ENV`. A server with `"auth": "oauth"` gets
+the token the human connected with `/mcp-auth <server>` (pi-mcp-adapter's
+encrypted store in `.pi/agent/mcp-oauth-encrypted/`, keyed by
+`PI_MCP_ADAPTER_OAUTH_FILE_KEY` in `.env`), refreshed on the host. Workflows
+need no token code of their own. `SERVER_MCP_TOKEN` / `MCP_TOKEN` in
 `.env` becomes a bearer token. It returns the tool's JSON parsed into a
 **string-keyed** Hash or Array (`item["id"]`, not `item[:id]`). It raises on
 error, and retries HTTP 429 up to five times. Inside a run it records a step
