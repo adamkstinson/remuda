@@ -16,6 +16,7 @@ module Remuda
       session_id = nil
       usage = nil
       jsonl = false
+      last_event = nil
 
       raw.each_line do |line|
         line = line.strip
@@ -26,6 +27,7 @@ module Remuda
         next unless event.is_a?(Hash)
 
         jsonl = true if event["type"]
+        last_event = event
         session_id ||= event["id"] if event["type"] == "session"
         error = event["errorMessage"] if event["errorMessage"].to_s != ""
         usage = event.dig("message", "usage") || event["usage"] || usage
@@ -49,7 +51,7 @@ module Remuda
         raw.strip
       end
 
-      { output: output, session_id: session_id, usage: usage, error: error, jsonl: jsonl }
+      { output: output, session_id: session_id, usage: usage, error: error, jsonl: jsonl, last_event: last_event }
     end
   end
 end
