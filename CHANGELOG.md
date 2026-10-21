@@ -10,3 +10,9 @@
   keeping other logins. This had not been wired since `PI_CODING_AGENT_DIR`
   moved to the agent's own `.pi/agent` (#63). `REMUDA_PI_AUTH` and a flat
   `.pi/auth.json`, which also stopped working then, are gone.
+- The Pi profile always passes `--mcp-config` (an empty one when the agent has
+  no servers), so pi-mcp-adapter no longer adds `"-builtin:mcp"` to the
+  agent's tracked `.pi/agent/settings.json` (#64). Rebuild the images.
+- A failed `Remuda.agent` step records the exit code, pi's error, the tail of
+  its stderr and the last JSON event, with `.env` and `auth.json` values
+  redacted (#65).
