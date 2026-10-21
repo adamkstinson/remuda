@@ -1,19 +1,25 @@
 #!/bin/sh
 # Remuda's Pi profile: every Pi in this image loads the MCP client
-# (pi-mcp-adapter). The runner sets REMUDA_MCP_CONFIG to this run's copy of
-# the agent's .mcp.json — normally /agent/.mcp.json, the fallback
+# (pi-mcp-adapter) and the built-in darkhorse model provider
+# (pi-profile/darkhorse.ts). The runner sets REMUDA_MCP_CONFIG to this run's
+# copy of the agent's .mcp.json — normally /agent/.mcp.json, the fallback
 # /run/remuda/mcp.json for an agent with no project file — which it mounts as
 # a secret-free copy (see design/08-secrets.md). Without it, read no MCP
 # config: the agent's own .mcp.json may hold literal secrets.
 PI=/usr/local/bin/pi
 ADAPTER=/usr/local/lib/node_modules/pi-mcp-adapter
+DARKHORSE=/opt/remuda/pi-profile/darkhorse.ts
 
 case "${1:-}" in
   install|remove|uninstall|update|list|config|auth) exec "$PI" "$@" ;;
 esac
 
+# --no-mcp turns off Pi's built-in MCP support for this run only; it does not
+# touch pi-mcp-adapter, which replaces it, or extension discovery, so a
+# project's own .pi/extensions still load. Without it every run printed a
+# warning that builtin:mcp lost the `/mcp` command to the adapter.
 if [ -n "${REMUDA_MCP_CONFIG:-}" ] && [ -f "$REMUDA_MCP_CONFIG" ]; then
   export PI_MCP_CONFIG_MODE=exclusive
-  exec "$PI" -e "$ADAPTER" --mcp-config "$REMUDA_MCP_CONFIG" "$@"
+  exec "$PI" -e "$ADAPTER" -e "$DARKHORSE" --no-mcp --mcp-config "$REMUDA_MCP_CONFIG" "$@"
 fi
-exec "$PI" -e "$ADAPTER" "$@"
+exec "$PI" -e "$ADAPTER" -e "$DARKHORSE" --no-mcp "$@"

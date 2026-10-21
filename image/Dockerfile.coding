@@ -1,8 +1,8 @@
 # remuda-coding — Pi plus the Rails/GitHub toolchain.
 # Tag: remuda-coding:latest
 FROM node:22-bookworm-slim AS pi
-RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1
-RUN npm install -g --ignore-scripts pi-mcp-adapter@4.0.0
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
+RUN npm install -g --ignore-scripts pi-mcp-adapter@5.4.0
 
 FROM ruby:4.0.6-bookworm
 
@@ -38,6 +38,7 @@ RUN ln -sfn /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bun
 
 # Remuda's Pi profile: the MCP client, loaded by the pi on PATH.
 COPY pi-profile/pi /opt/remuda/bin/pi
+COPY pi-profile/darkhorse.ts /opt/remuda/pi-profile/darkhorse.ts
 ENV PATH=/opt/remuda/bin:$PATH
 
 WORKDIR /agent

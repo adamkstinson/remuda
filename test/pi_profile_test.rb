@@ -10,13 +10,16 @@ require "tmpdir"
 class PiProfileTest < Minitest::Test
   ROOT = File.expand_path("..", __dir__)
   SHIM = File.join(ROOT, "image/pi-profile/pi")
-  ADAPTER = "pi-mcp-adapter@4.0.0"
+  PI_VERSION = "@earendil-works/pi-coding-agent@1.3.0"
+  ADAPTER = "pi-mcp-adapter@5.4.0"
 
-  def test_both_images_install_the_mcp_client_and_put_the_profile_first_on_path
+  def test_both_images_install_pi_and_the_mcp_client_and_put_the_profile_first_on_path
     %w[image/Dockerfile image/Dockerfile.coding].each do |file|
       text = File.read(File.join(ROOT, file))
+      assert_includes text, "npm install -g --ignore-scripts #{PI_VERSION}", file
       assert_includes text, "npm install -g --ignore-scripts #{ADAPTER}", file
       assert_includes text, "COPY pi-profile/pi /opt/remuda/bin/pi", file
+      assert_includes text, "COPY pi-profile/darkhorse.ts /opt/remuda/pi-profile/darkhorse.ts", file
       assert_match(%r{^ENV PATH=/opt/remuda/bin:\$PATH$}, text, file)
     end
   end
@@ -24,7 +27,7 @@ class PiProfileTest < Minitest::Test
   def test_profile_reads_the_mount_named_by_remuda_mcp_config
     with_shim(mcp_config: :agent) do |run|
       out = run.call("--mode", "json", "--print")
-      assert_equal "-e /adapter --mcp-config AGENT/.mcp.json --mode json --print", out[:args]
+      assert_equal "-e /adapter -e /darkhorse.ts --no-mcp --mcp-config AGENT/.mcp.json --mode json --print", out[:args]
       assert_equal "exclusive", out[:mode]
     end
   end
@@ -32,7 +35,7 @@ class PiProfileTest < Minitest::Test
   def test_profile_reads_the_fallback_copy_when_the_agent_has_no_project_file
     with_shim(mcp_config: :run) do |run|
       out = run.call("--print")
-      assert_equal "-e /adapter --mcp-config RUN/mcp.json --print", out[:args]
+      assert_equal "-e /adapter -e /darkhorse.ts --no-mcp --mcp-config RUN/mcp.json --print", out[:args]
       assert_equal "exclusive", out[:mode]
     end
   end
@@ -42,7 +45,7 @@ class PiProfileTest < Minitest::Test
   def test_profile_without_the_env_ignores_the_agents_own_mcp_json
     with_shim(mcp_config: nil) do |run|
       out = run.call("--print")
-      assert_equal "-e /adapter --print", out[:args]
+      assert_equal "-e /adapter -e /darkhorse.ts --no-mcp --print", out[:args]
       assert_equal "", out[:mode]
     end
   end
@@ -73,7 +76,8 @@ class PiProfileTest < Minitest::Test
       shim = File.join(dir, "pi")
       File.write(shim, File.read(SHIM)
         .gsub("/usr/local/bin/pi", fake)
-        .gsub("/usr/local/lib/node_modules/pi-mcp-adapter", "/adapter"))
+        .gsub("/usr/local/lib/node_modules/pi-mcp-adapter", "/adapter")
+        .gsub("/opt/remuda/pi-profile/darkhorse.ts", "/darkhorse.ts"))
       File.chmod(0o755, shim)
 
       config = case mcp_config
