@@ -12,6 +12,7 @@ RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
 RUN npm install -g --ignore-scripts pi-mcp-adapter@5.4.0
 COPY pi-profile/pi /opt/remuda/bin/pi
 COPY pi-profile/darkhorse.ts /opt/remuda/pi-profile/darkhorse.ts
+COPY pi-profile/no-mcp.json /opt/remuda/pi-profile/no-mcp.json
 ENV PATH=/opt/remuda/bin:$PATH
 
 WORKDIR /agent

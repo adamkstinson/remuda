@@ -39,6 +39,7 @@ RUN ln -sfn /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bun
 # Remuda's Pi profile: the MCP client, loaded by the pi on PATH.
 COPY pi-profile/pi /opt/remuda/bin/pi
 COPY pi-profile/darkhorse.ts /opt/remuda/pi-profile/darkhorse.ts
+COPY pi-profile/no-mcp.json /opt/remuda/pi-profile/no-mcp.json
 ENV PATH=/opt/remuda/bin:$PATH
 
 WORKDIR /agent

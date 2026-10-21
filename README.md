@@ -255,7 +255,10 @@ The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
 adapter at this run's copy of `.mcp.json` and nothing else. The profile also
 passes `--no-mcp`, so Pi's own built-in MCP support — which the adapter
 replaces — does not start and does not warn about losing the `/mcp` command
-to it. A project's own `.pi/extensions/` still load normally. A
+to it. A project's own `.pi/extensions/` still load normally. An agent with
+no MCP servers gets the image's empty config, never its own `.mcp.json`;
+that explicit config is also what stops the adapter writing
+`"-builtin:mcp"` into the agent's tracked `.pi/agent/settings.json`. A
 directory declares its servers in its root `.mcp.json`: pi's own project
 config, so `pi` on the host, `Remuda.tool`, and the box all read the same
 file. Header values use pi's `${VAR}` syntax; the value lives in `.env`.
