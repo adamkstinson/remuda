@@ -232,11 +232,30 @@ ANTHROPIC_API_KEY=sk-ant-...
 Do not put third-party SaaS tokens in `.env`. Self-hosted MCP tokens may live
 there; the file is never mounted into the sandbox.
 
+The images ship a built-in `darkhorse` provider for ai.darkhorse.so (Dark
+Horse's OpenAI-compatible inference API). One line in the agent's `.env`
+
+```
+DARKHORSE_API_KEY=dh_...
+```
+
+gives every model that key can reach — the provider lists the live catalog
+from `GET /api/v1/models`, so there is no `models.json` to maintain and
+nothing goes stale when the catalog changes. Then `defaultProvider:
+"darkhorse"` in `.pi/agent/settings.json`, or `provider: "darkhorse", model:
+"glm-5.2"` on a `Remuda.agent` call, works like any other provider. Without
+the key the provider lists no models and Pi starts exactly as it would
+without it.
+
 #### MCP from inside the sandbox
 
 The images ship Remuda's Pi profile: the `pi` on `PATH` loads an MCP client
 ([pi-mcp-adapter](https://www.npmjs.com/package/pi-mcp-adapter), pinned in
-`image/Dockerfile`) and points it at this run's copy of `.mcp.json` and nothing else. A
+`image/Dockerfile`) and the `darkhorse` provider extension, and points the
+adapter at this run's copy of `.mcp.json` and nothing else. The profile also
+passes `--no-mcp`, so Pi's own built-in MCP support — which the adapter
+replaces — does not start and does not warn about losing the `/mcp` command
+to it. A project's own `.pi/extensions/` still load normally. A
 directory declares its servers in its root `.mcp.json`: pi's own project
 config, so `pi` on the host, `Remuda.tool`, and the box all read the same
 file. Header values use pi's `${VAR}` syntax; the value lives in `.env`.

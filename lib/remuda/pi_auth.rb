@@ -29,7 +29,8 @@ module Remuda
       "TOGETHER_API_KEY" => "together",
       "BASETEN_API_KEY" => "baseten",
       "KIMI_API_KEY" => "kimi-coding",
-      "MINIMAX_API_KEY" => "minimax"
+      "MINIMAX_API_KEY" => "minimax",
+      "DARKHORSE_API_KEY" => "darkhorse"
     }.freeze
 
     def self.env_vars(agent_dir)

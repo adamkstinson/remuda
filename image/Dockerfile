@@ -6,11 +6,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Pin Pi with the harness. Gem version ↔ image tag ↔ this package version.
-RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.85.1
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@1.3.0
 
 # Remuda's Pi profile: the MCP client, loaded by the pi on PATH.
-RUN npm install -g --ignore-scripts pi-mcp-adapter@4.0.0
+RUN npm install -g --ignore-scripts pi-mcp-adapter@5.4.0
 COPY pi-profile/pi /opt/remuda/bin/pi
+COPY pi-profile/darkhorse.ts /opt/remuda/pi-profile/darkhorse.ts
 ENV PATH=/opt/remuda/bin:$PATH
 
 WORKDIR /agent

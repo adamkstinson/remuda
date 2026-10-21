@@ -34,6 +34,21 @@ class PiAuthTest < Minitest::Test
     end
   end
 
+  def test_darkhorse_api_key_synthesizes_darkhorse_auth_json
+    with_agent do |agent|
+      File.write(File.join(agent, ".env"), "DARKHORSE_API_KEY=dh-test-not-real\n")
+
+      Dir.mktmpdir("stage") do |stage|
+        auth_dir = Remuda::PiAuth.stage(stage, agent)
+        refute_nil auth_dir
+        creds = JSON.parse(File.read(File.join(auth_dir, "auth.json")))
+        assert_equal "api_key", creds.dig("darkhorse", "type")
+        assert_equal "dh-test-not-real", creds.dig("darkhorse", "key")
+        assert_equal ["darkhorse"], creds.keys
+      end
+    end
+  end
+
   def test_agent_pi_agent_auth_json_is_used_in_place
     with_agent do |agent|
       owned = File.join(agent, ".pi", "agent")
