@@ -22,13 +22,13 @@ module Remuda
         input: { "prompt" => prompt.to_s, "provider" => provider, "model" => model, "session_id" => session_id,
                  "tools" => tools, "exclude_tools" => exclude_tools }.compact,
         output: {
-          "text" => result.output,
+          "text" => AgentFailure.scrub(result.output, agent_dir),
           "image" => result.image,
           "exit_code" => result.exit_code
         },
         session_id: result.session_id,
         usage: result.usage,
-        error: result.ok ? nil : result.output.to_s[0, 2000]
+        error: result.ok ? nil : AgentFailure.describe(result, agent_dir)
       )
     end
 

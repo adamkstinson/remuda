@@ -5,7 +5,9 @@ require "fileutils"
 require "tmpdir"
 
 module Remuda
-  AgentResult = Struct.new(:output, :session_id, :usage, :ok, :exit_code, :image, keyword_init: true)
+  # stderr, last_event and pi_error are kept for a failed run's step (AgentFailure).
+  AgentResult = Struct.new(:output, :session_id, :usage, :ok, :exit_code, :image, :stderr, :last_event, :pi_error,
+                           keyword_init: true)
 
   module Sandbox
     # Mattermost and ticks call Remuda.agent. docker-api/Excon default is 60s;
@@ -50,6 +52,7 @@ module Remuda
 
         wait = nil
         text = ""
+        stderr = ""
         local = ChannelsMcp.routes(agent_dir, run: Current.run, pins: policy.pins)
         McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
           container = create_and_start(
@@ -59,6 +62,7 @@ module Remuda
           begin
             wait = container.wait(WAIT_SECONDS)
             text = decode_logs(container.logs(stdout: true, stderr: true))
+            stderr = decode_logs(container.logs(stderr: true)) unless wait.fetch("StatusCode", 1).to_i.zero?
           ensure
             container.delete(force: true)
           end
@@ -72,7 +76,10 @@ module Remuda
           usage: parsed[:usage],
           ok: status.zero?,
           exit_code: status,
-          image: Image.for(agent_dir)
+          image: Image.for(agent_dir),
+          stderr: stderr,
+          last_event: parsed[:last_event],
+          pi_error: parsed[:error]
         )
       end
     end

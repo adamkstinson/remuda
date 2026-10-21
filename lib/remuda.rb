@@ -61,6 +61,7 @@ require_relative "remuda/directory"
 require_relative "remuda/channels"
 require_relative "remuda/channels_mcp"
 require_relative "remuda/pi_auth"
+require_relative "remuda/agent_failure"
 require_relative "remuda/generator"
 require_relative "remuda/cli"
 

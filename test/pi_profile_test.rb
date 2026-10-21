@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "fileutils"
+require "json"
 require "open3"
 require "tmpdir"
 
@@ -20,6 +21,7 @@ class PiProfileTest < Minitest::Test
       assert_includes text, "npm install -g --ignore-scripts #{ADAPTER}", file
       assert_includes text, "COPY pi-profile/pi /opt/remuda/bin/pi", file
       assert_includes text, "COPY pi-profile/darkhorse.ts /opt/remuda/pi-profile/darkhorse.ts", file
+      assert_includes text, "COPY pi-profile/no-mcp.json /opt/remuda/pi-profile/no-mcp.json", file
       assert_match(%r{^ENV PATH=/opt/remuda/bin:\$PATH$}, text, file)
     end
   end
@@ -40,14 +42,30 @@ class PiProfileTest < Minitest::Test
     end
   end
 
-  # Without the env the profile must not point Pi at any file: the agent's own
-  # .mcp.json may hold literal secrets. Read only what the runner mounted.
-  def test_profile_without_the_env_ignores_the_agents_own_mcp_json
+  # Without the env the profile must not read the agent's own .mcp.json: it
+  # may hold literal secrets. It points the adapter at the image's empty
+  # config instead. An explicit --mcp-config is also what keeps
+  # pi-mcp-adapter 5.4 from adding "-builtin:mcp" to the agent's tracked
+  # .pi/agent/settings.json on first start (#64).
+  def test_profile_without_the_env_reads_the_images_empty_config
     with_shim(mcp_config: nil) do |run|
       out = run.call("--print")
-      assert_equal "-e /adapter -e /darkhorse.ts --no-mcp --print", out[:args]
-      assert_equal "", out[:mode]
+      assert_equal "-e /adapter -e /darkhorse.ts --no-mcp --mcp-config /no-mcp.json --print", out[:args]
+      assert_equal "exclusive", out[:mode]
     end
+  end
+
+  def test_profile_with_the_env_naming_a_missing_file_reads_the_images_empty_config
+    with_shim(mcp_config: "/nonexistent/mcp.json") do |run|
+      out = run.call("--print")
+      assert_equal "-e /adapter -e /darkhorse.ts --no-mcp --mcp-config /no-mcp.json --print", out[:args]
+      assert_equal "exclusive", out[:mode]
+    end
+  end
+
+  def test_the_images_empty_config_declares_no_servers
+    config = JSON.parse(File.read(File.join(ROOT, "image/pi-profile/no-mcp.json")))
+    assert_equal({ "mcpServers" => {} }, config)
   end
 
   def test_profile_passes_pi_subcommands_through_untouched
@@ -77,7 +95,8 @@ class PiProfileTest < Minitest::Test
       File.write(shim, File.read(SHIM)
         .gsub("/usr/local/bin/pi", fake)
         .gsub("/usr/local/lib/node_modules/pi-mcp-adapter", "/adapter")
-        .gsub("/opt/remuda/pi-profile/darkhorse.ts", "/darkhorse.ts"))
+        .gsub("/opt/remuda/pi-profile/darkhorse.ts", "/darkhorse.ts")
+        .gsub("/opt/remuda/pi-profile/no-mcp.json", "/no-mcp.json"))
       File.chmod(0o755, shim)
 
       config = case mcp_config
