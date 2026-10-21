@@ -5,7 +5,8 @@ require "json"
 
 module Remuda
   # Per-agent model provider config. The runner reads the agent .env on the
-  # host and stages a Pi auth.json; it never mounts .env into the sandbox.
+  # host and writes the agent's Pi auth.json; it never mounts .env into the
+  # sandbox.
   module PiAuth
     ENV_TO_PROVIDER = {
       "ANTHROPIC_API_KEY" => "anthropic",
@@ -45,40 +46,63 @@ module Remuda
       blank_to_nil(env_vars(agent_dir)["PI_MODEL"])
     end
 
-    def self.stage(tmpdir, agent_dir)
-      source = resolve(agent_dir)
-      return nil unless source
-      return source[:dir] if source[:dir]
+    # Writes the provider keys named in the agent's .env into
+    # <agent>/.pi/agent/auth.json, the Pi user dir the sandbox mounts as
+    # PI_CODING_AGENT_DIR. .env owns the providers it names (a rotated key
+    # takes effect on the next run); every other entry — a login made inside
+    # `remuda` — is kept. Never reads the operator's ~/.pi/agent. Returns
+    # whether it wrote.
+    def self.sync!(agent_dir)
+      wanted = from_env(env_vars(agent_dir))
+      return false unless wanted
 
-      dir = File.join(tmpdir, "pi-agent")
-      FileUtils.mkdir_p(dir)
-      File.chmod(0o700, dir)
-      dest = File.join(dir, "auth.json")
-      if source[:file]
-        FileUtils.cp(source[:file], dest)
-      else
-        File.write(dest, source[:json])
-      end
-      File.chmod(0o600, dest)
-      dir
+      path = auth_path(agent_dir)
+      current = read_auth(path)
+      return false if current.nil?
+
+      merged = current.merge(wanted)
+      return false if merged == current
+
+      write_auth(path, merged)
+      true
     end
 
-    def self.resolve(agent_dir)
-      override = blank_to_nil(ENV["REMUDA_PI_AUTH"])
-      return { file: override } if override && File.file?(override)
+    def self.auth_path(agent_dir)
+      File.join(File.expand_path(agent_dir), ".pi", "agent", "auth.json")
+    end
 
-      root = File.expand_path(agent_dir)
-      agent_pi = File.join(root, ".pi", "agent")
-      return { dir: agent_pi } if File.file?(File.join(agent_pi, "auth.json"))
+    # {} for a missing or empty file; nil for one this code must not touch.
+    def self.read_auth(path)
+      return {} unless File.file?(path)
 
-      flat = File.join(root, ".pi", "auth.json")
-      return { file: flat } if File.file?(flat)
+      text = File.read(path)
+      return {} if text.strip.empty?
 
-      synthesized = from_env(env_vars(agent_dir))
-      return { json: synthesized } if synthesized
+      data = JSON.parse(text)
+      return data if data.is_a?(Hash)
 
+      warn "remuda: #{path} is not a JSON object; not writing provider keys from .env"
+      nil
+    rescue JSON::ParserError
+      warn "remuda: #{path} is not valid JSON; not writing provider keys from .env"
       nil
     end
+    private_class_method :read_auth
+
+    def self.write_auth(path, data)
+      dir = File.dirname(path)
+      FileUtils.mkdir_p(dir)
+      tmp = File.join(dir, ".auth.json.#{Process.pid}.tmp")
+      File.open(tmp, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |f|
+        f.write(JSON.pretty_generate(data))
+        f.write("\n")
+      end
+      File.chmod(0o600, tmp)
+      File.rename(tmp, path)
+    ensure
+      FileUtils.rm_f(tmp) if tmp && File.exist?(tmp)
+    end
+    private_class_method :write_auth
 
     def self.from_env(vars)
       wanted = blank_to_nil(vars["PI_PROVIDER"])
@@ -90,9 +114,7 @@ module Remuda
 
         creds[provider] = { "type" => "api_key", "key" => key }
       end
-      return nil if creds.empty?
-
-      JSON.pretty_generate(creds)
+      creds.empty? ? nil : creds
     end
     private_class_method :from_env
 

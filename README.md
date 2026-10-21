@@ -143,7 +143,12 @@ One-shot **sandboxed** Pi in `remuda-pi:latest` unless the agent has
 injected when present, with git configured (env only) to take https credentials
 from `gh`, so `git push` to an https GitHub remote works; `.env` is still not
 mounted. Result has `output`,
-`ok`, `exit_code`, and related fields.
+`ok`, `exit_code`, and related fields. When pi exits non-zero, the agent
+step's `error` holds the exit code, pi's error message, the last 4 KB of
+its stderr and the last JSON event it printed, so a startup crash, a
+provider error and a cutoff can be told apart in `remuda console`. Values
+from `.env` and the agent's `auth.json` are replaced with `[REDACTED]`
+before anything is stored.
 
 ```ruby
 # .remuda/workflows/ping.rb
@@ -220,8 +225,11 @@ Remuda.agent("Add the on-call rotation to it.", session_id: first.session_id)
 ```
 
 Put credentials in `<agent>/.pi/agent/auth.json` (login inside `remuda`), or
-synthesize them from the agent `.env` (`PI_PROVIDER` plus that provider’s API
-key — which key to write, not which model to run).
+put the provider's API key in the agent `.env`. Before every run, `remuda run`
+and bare `remuda` write the `.env` keys into that `auth.json` on the host,
+replacing the providers `.env` names and keeping every other entry, so a
+rotated key takes effect on the next run. `PI_PROVIDER` limits which key is
+written; it does not pick the model.
 
 ```bash
 # in the agent's .env (gitignored) — auth shortcut only
