@@ -46,6 +46,7 @@ module Remuda
         File.write(prompt_path, prompt.to_s)
         File.chmod(0o644, prompt_path)
         ensure_pi_agent_dir(agent_dir)
+        PiAuth.sync!(agent_dir)
 
         wait = nil
         text = ""
@@ -169,6 +170,8 @@ module Remuda
     # the length of the session.
     def self.attach(agent_dir)
       agent_dir = File.expand_path(agent_dir)
+      ensure_pi_agent_dir(agent_dir)
+      PiAuth.sync!(agent_dir)
       Dir.mktmpdir("remuda-sandbox") do |tmpdir|
         File.chmod(0o700, tmpdir)
         McpForwarder.open(agent_dir, tmpdir, local: ChannelsMcp.routes(agent_dir)) do |mcp_path, _forwarder|
