@@ -333,9 +333,12 @@ A server that signs in with OAuth (Gmail, Calendar) is declared in
 
 The tokens live in pi-mcp-adapter's `encrypted-file` store,
 `.pi/agent/mcp-oauth-encrypted/` (gitignored), encrypted with
-`PI_MCP_ADAPTER_OAUTH_FILE_KEY` from `.env`. Set
-`"oauthCredentialStore": "encrypted-file"` in `.pi/agent/settings.json` (new
-agents have it). Connect once with the adapter, on the host, as this agent:
+`PI_MCP_ADAPTER_OAUTH_FILE_KEY` from `.env`. Select that store in the
+`settings` block of `.mcp.json`, which is where the adapter reads it (new
+agents have it): `"settings": { "oauthCredentialStore": "encrypted-file" }`.
+Without it the adapter uses the OS keyring, which a headless server does not
+have. Connect once with the adapter (pi-mcp-adapter 4 or later), on the host,
+as this agent:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"  # key, once, into .env
