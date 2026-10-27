@@ -18,6 +18,8 @@ module Remuda
       jsonl = false
       last_event = nil
       model_error = false
+      provider = nil
+      model = nil
 
       raw.each_line do |line|
         line = line.strip
@@ -53,6 +55,10 @@ module Remuda
         end
         joined = texts.join
         last_text = joined unless joined.empty?
+        # What Pi says it served this assistant message with. Kept for the
+        # step's fallback record (#71); nil on older pi or a plain run.
+        provider = msg["provider"] if msg["provider"].to_s != ""
+        model = msg["model"] if msg["model"].to_s != ""
       rescue JSON::ParserError
         next
       end
@@ -64,7 +70,7 @@ module Remuda
       end
 
       { output: output, session_id: session_id, usage: usage, error: error, jsonl: jsonl, last_event: last_event,
-        model_error: model_error }
+        model_error: model_error, provider: provider, model: model }
     end
   end
 end

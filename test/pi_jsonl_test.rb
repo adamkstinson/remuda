@@ -72,4 +72,18 @@ class PiJsonlTest < Minitest::Test
     parsed = Remuda::PiJsonl.parse(JSONL)
     refute_includes parsed[:output], '"type":"session"'
   end
+
+  # The assistant message names the provider and model that served it; the
+  # fallback record uses them (#71).
+  def test_reports_the_provider_and_model_that_served_the_message
+    raw = JSON.generate("type" => "message_end",
+                        "message" => { "role" => "assistant", "provider" => "anthropic",
+                                       "model" => "claude-sonnet-4-5",
+                                       "content" => [{ "type" => "text", "text" => "hi" }] },
+                        "stopReason" => "stop")
+
+    parsed = Remuda::PiJsonl.parse("#{raw}\n")
+    assert_equal "anthropic", parsed[:provider]
+    assert_equal "claude-sonnet-4-5", parsed[:model]
+  end
 end

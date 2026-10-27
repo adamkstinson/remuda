@@ -1,0 +1,7 @@
+# Optional fallback for a provider error. When the primary run ends in a
+# provider error, Remuda.agent retries once against this, then records what
+# served the run on the agent step. Uncomment to use it; either key may be
+# omitted and Pi resolves whatever the retry leaves out.
+# fallback:
+#   provider: anthropic
+#   model: claude-sonnet-4-5

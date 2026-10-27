@@ -27,6 +27,7 @@ class GeneratorTest < Minitest::Test
       assert File.directory?(File.join(dir, ".remuda/workflows"))
       assert File.directory?(File.join(dir, ".remuda/bin"))
       assert File.file?(File.join(dir, ".remuda/channels.yml"))
+      assert File.file?(File.join(dir, ".remuda/model.yml")), "needs the fallback template"
 
       %w[lib migrate image].each do |name|
         refute File.exist?(File.join(dir, name)), "must not contain #{name}/"
