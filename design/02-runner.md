@@ -92,7 +92,10 @@ pi --mode json --print --approve
 result object. `ok` is false when Pi exits non-zero or its last assistant
 message ended with `stopReason: "error"`; the provider error Pi exits 0 on
 still fails the step and the run. SDK/RPC are out: SDK is Node; RPC is a
-long-lived peer; one-shot `agent` is print mode.
+long-lived peer; one-shot `agent` is print mode. When the agent declares a
+fallback in `.remuda/model.yml`, a run that ends with `stopReason: "error"`
+is retried once against it (#71); the step's `output.fallback` records the
+retry and the provider/model that served it.
 
 **Interactive (`remuda`):** same image, argv is `pi` (TUI), TTY attached.
 Pi writes sessions under `/agent/.pi/agent/sessions` (the agent’s user folder).

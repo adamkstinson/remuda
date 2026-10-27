@@ -135,7 +135,9 @@ conversation with context. Session files live in `.pi/agent/sessions/`.
 - For structured output, ask for JSON and parse `result.output`. Nothing in
   the gem does it for you.
 - The model is Pi's default in `.pi/agent/settings.json`. Pass `provider:` /
-  `model:` to override it for one call.
+  `model:` to override it for one call. A provider error retries once on the
+  optional fallback in `.remuda/model.yml`; the step's `output.fallback`
+  records what served it.
 - MCP calls from inside the sandbox go through a host forwarder that adds the
   declared headers, so the key never enters the box.
 

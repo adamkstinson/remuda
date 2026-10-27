@@ -78,6 +78,7 @@ ops/
     ├── Gemfile            harness pin (not the app Gemfile)
     ├── workflows/         plain Ruby scripts
     ├── channels.yml       channel bindings
+    ├── model.yml          optional fallback provider/model
     └── db/                remuda.sqlite3 created on first run/tick/console
 ```
 
@@ -164,14 +165,41 @@ It does **not** pass `--offline`. The agent `.env` is never mounted. Host
 
 By default `Remuda.agent` does not pass `--provider` / `--model`. Pi uses
 `defaultProvider` / `defaultModel` from that `settings.json` (set in
-interactive `remuda` with `/model`, Ctrl+S). Remuda does not declare a
-second default. Override it for one call with `provider:` / `model:`:
+interactive `remuda` with `/model`, Ctrl+S). Override it for one call with
+`provider:` / `model:`, and declare an optional fallback (below) for a
+provider error:
 
 ```ruby
 Remuda.agent(prompt)                                                # Pi's default
 Remuda.agent(prompt, provider: "anthropic", model: "claude-sonnet-4-5")
 Remuda.agent(prompt, model: "gpt-4.1")                              # Pi resolves the provider
 ```
+
+#### Fallback provider/model
+
+A provider error fails the step (#70). Declare one optional fallback in
+`.remuda/model.yml` and `Remuda.agent` retries the run once against it before
+the step is recorded:
+
+```yaml
+# .remuda/model.yml
+fallback:
+  provider: anthropic
+  model: claude-sonnet-4-5
+```
+
+Either key may be omitted; Pi resolves whatever the retry leaves out. No
+file, no block, or an empty block means no retry, and a run that succeeds
+first is never retried. The retried run starts fresh (a `session_id:` you
+passed is reused), and the `agent` step's `output.fallback` records that the
+fallback served the run and the provider/model Pi reports it used:
+
+```json
+{"used": true, "provider": "anthropic", "model": "claude-sonnet-4-5"}
+```
+
+The file is host-only, like `channels.yml` and `mounts.yml`; `.remuda/` is not
+mounted into the sandbox.
 
 #### Narrowing the tools for one call
 
@@ -210,7 +238,8 @@ The `agent` step's `input` records `tools` / `exclude_tools` as given, pins
 included.
 
 The override is recorded on the `agent` step's input. `.env` `PI_PROVIDER` /
-`PI_MODEL` are not a fallback for it.
+`PI_MODEL` are not a fallback for it; the optional fallback lives in
+`.remuda/model.yml`.
 
 `session_id:` resumes an existing Pi session, creating it if it is missing
 (`pi --session-id`). Pass the `session_id` a previous run returned to

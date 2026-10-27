@@ -6,8 +6,10 @@ require "tmpdir"
 
 module Remuda
   # stderr, last_event and pi_error are kept for a failed run's step (AgentFailure).
+  # model_error marks a provider error that should trigger the .remuda/model.yml
+  # fallback (#71); provider/model are what Pi actually served the run with.
   AgentResult = Struct.new(:output, :session_id, :usage, :ok, :exit_code, :image, :stderr, :last_event, :pi_error,
-                           keyword_init: true)
+                           :model_error, :provider, :model, keyword_init: true)
 
   module Sandbox
     # Mattermost and ticks call Remuda.agent. docker-api/Excon default is 60s;
@@ -85,7 +87,10 @@ module Remuda
           image: Image.for(agent_dir),
           stderr: stderr,
           last_event: parsed[:last_event],
-          pi_error: parsed[:error]
+          pi_error: parsed[:error],
+          model_error: parsed[:model_error],
+          provider: parsed[:provider],
+          model: parsed[:model]
         )
       end
     end
