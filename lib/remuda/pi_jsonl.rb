@@ -17,6 +17,7 @@ module Remuda
       usage = nil
       jsonl = false
       last_event = nil
+      model_error = false
 
       raw.each_line do |line|
         line = line.strip
@@ -36,6 +37,17 @@ module Remuda
         next unless msg.is_a?(Hash) && msg["role"] == "assistant"
         next unless %w[message_end turn_end].include?(event["type"])
 
+        # The provider error pi exits 0 on lives here: the last assistant
+        # message ends with stopReason error. A later successful message
+        # clears it.
+        if event["stopReason"] == "error"
+          model_error = true
+          error = event["errorMessage"] if event["errorMessage"].to_s != ""
+        else
+          model_error = false
+          error = nil
+        end
+
         texts = Array(msg["content"]).filter_map do |part|
           part["text"] if part.is_a?(Hash) && part["type"] == "text" && part["text"].to_s != ""
         end
@@ -51,7 +63,8 @@ module Remuda
         raw.strip
       end
 
-      { output: output, session_id: session_id, usage: usage, error: error, jsonl: jsonl, last_event: last_event }
+      { output: output, session_id: session_id, usage: usage, error: error, jsonl: jsonl, last_event: last_event,
+        model_error: model_error }
     end
   end
 end

@@ -89,8 +89,10 @@ pi --mode json --print --approve
 
 `--approve` so `/agent/.pi` and `AGENTS.md` load. Ruby parses Pi's public
 `--mode json` stream (session id, assistant text, tool events, usage) into a
-result object. SDK/RPC are out: SDK is Node; RPC is a long-lived peer; one-shot
-`agent` is print mode.
+result object. `ok` is false when Pi exits non-zero or its last assistant
+message ended with `stopReason: "error"`; the provider error Pi exits 0 on
+still fails the step and the run. SDK/RPC are out: SDK is Node; RPC is a
+long-lived peer; one-shot `agent` is print mode.
 
 **Interactive (`remuda`):** same image, argv is `pi` (TUI), TTY attached.
 Pi writes sessions under `/agent/.pi/agent/sessions` (the agent’s user folder).

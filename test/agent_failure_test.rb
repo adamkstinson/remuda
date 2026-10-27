@@ -95,7 +95,65 @@ class AgentFailureTest < Minitest::Test
     assert_equal "pong", step.output["text"]
   end
 
+  # Pi exits 0 when the provider refuses the call; the agent step used to
+  # record ok with empty text and 0 tokens (#70).
+  def test_a_provider_error_on_an_exit_zero_run_fails_the_step
+    error_line = provider_error("xai API error (403): out of credits")
+    step = run_with(FakeContainer.new(0, "#{error_line}\n", ""))
+
+    refute_nil step.error
+    assert_includes step.error, "xai API error (403): out of credits"
+    assert_includes step.error, "exit 0"
+  end
+
+  def test_a_provider_error_makes_the_result_not_ok
+    error_line = provider_error("out of credits")
+    result = with_fake_create(-> { FakeContainer.new(0, "#{error_line}\n", "") }) do
+      Remuda::Sandbox.run(@dir, "hi")
+    end
+
+    refute result.ok
+    assert_equal 0, result.exit_code
+    assert_equal "out of credits", result.pi_error
+  end
+
+  def test_a_provider_error_fails_the_workflow_run
+    File.write(File.join(@dir, ".remuda/workflows/guarded_agent.rb"), <<~RUBY)
+      result = Remuda.agent("hi")
+      raise "agent failed: \#{result.output}" unless result.ok
+    RUBY
+    error_line = provider_error("out of credits")
+    record = with_fake_create(-> { FakeContainer.new(0, "#{error_line}\n", "") }) do
+      Remuda::Runner.new(@dir).run("guarded_agent", trigger: "manual")
+    end
+
+    assert_equal "error", record.status
+    assert_includes record.exception_message, "out of credits"
+  end
+
+  def test_a_provider_error_still_lets_a_guarded_workflow_succeed
+    File.write(File.join(@dir, ".remuda/workflows/guarded_agent.rb"), <<~RUBY)
+      result = Remuda.agent("hi")
+      raise "agent failed: \#{result.output}" unless result.ok
+    RUBY
+    done = JSON.generate("type" => "message_end",
+                         "message" => { "role" => "assistant", "content" => [{ "type" => "text", "text" => "pong" }] },
+                         "stopReason" => "stop")
+    record = with_fake_create(-> { FakeContainer.new(0, "#{done}\n", "") }) do
+      Remuda::Runner.new(@dir).run("guarded_agent", trigger: "manual")
+    end
+
+    assert_equal "ok", record.status
+  end
+
   private
+
+  def provider_error(message)
+    JSON.generate("type" => "message_end",
+                  "message" => { "role" => "assistant", "content" => [] },
+                  "stopReason" => "error",
+                  "errorMessage" => message)
+  end
 
   def session_line
     JSON.generate("type" => "session", "version" => 3, "id" => "01a15ca9-0000-7000-8000-000000000000", "cwd" => "/agent") + "\n"
