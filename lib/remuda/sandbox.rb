@@ -53,6 +53,9 @@ module Remuda
         wait = nil
         text = ""
         stderr = ""
+        parsed = PiJsonl.parse("")
+        status = 1
+        ok = false
         local = ChannelsMcp.routes(agent_dir, run: Current.run, pins: policy.pins)
         McpForwarder.open(agent_dir, tmpdir, local: local) do |mcp_path, _forwarder|
           container = create_and_start(
@@ -61,20 +64,23 @@ module Remuda
           )
           begin
             wait = container.wait(WAIT_SECONDS)
+            status = (wait || {}).fetch("StatusCode", 1).to_i
             text = decode_logs(container.logs(stdout: true, stderr: true))
-            stderr = decode_logs(container.logs(stderr: true)) unless wait.fetch("StatusCode", 1).to_i.zero?
+            parsed = PiJsonl.parse(text)
+            # Pi exits 0 on a provider error; its JSONL says so. stderr is
+            # worth keeping for both kinds of failure.
+            ok = status.zero? && !parsed[:model_error]
+            stderr = decode_logs(container.logs(stderr: true)) unless ok
           ensure
             container.delete(force: true)
           end
         end
-        status = (wait || {}).fetch("StatusCode", 1).to_i
-        parsed = PiJsonl.parse(text)
 
         AgentResult.new(
           output: parsed[:output],
           session_id: parsed[:session_id],
           usage: parsed[:usage],
-          ok: status.zero?,
+          ok: ok,
           exit_code: status,
           image: Image.for(agent_dir),
           stderr: stderr,
