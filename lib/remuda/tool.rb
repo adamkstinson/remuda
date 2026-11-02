@@ -94,8 +94,8 @@ module Remuda
 
   def self.mcp_url(agent_dir, server)
     spec = mcp_config(agent_dir).dig("mcpServers", server)
-    url = Mcp.resolve_url(spec)
-    raise "unknown MCP server #{server.inspect} (no url in #{Mcp::CONFIG})" if url.nil? || url.empty?
+    url = Mcp.resolve_url(spec, vars: Directory.env_vars(agent_dir))
+    raise "unknown MCP server #{server.inspect} (no url in #{Mcp::CONFIG}, or a ${VAR} in it is unset)" if url.nil? || url.empty?
 
     url
   end

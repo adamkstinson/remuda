@@ -109,7 +109,7 @@ module Remuda
       routes = {}
       servers = (config["mcpServers"] || {}).to_h do |name, spec|
         headers = spec.is_a?(Hash) ? spec["headers"] : nil
-        url = spec.is_a?(Hash) ? Mcp.resolve_url(spec) : nil
+        url = spec.is_a?(Hash) ? Mcp.resolve_url(spec, vars: vars, env: env) : nil
         if url && agent_dir && McpOAuth.oauth?(agent_dir, name, spec)
           oauth = -> { McpOAuth.headers(agent_dir, name, spec) }
           routes[name] = Route.new(name: name, upstream: Mcp.host_url(url), auth: oauth)

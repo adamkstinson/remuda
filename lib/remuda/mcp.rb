@@ -37,7 +37,27 @@ module Remuda
       name.split(".").first == expected
     end
 
-    def self.resolve_url(spec)
+    # The URL this host should call. ${VAR} in it is filled the same way as
+    # headers: the agent .env (vars), then the process env. A placeholder with
+    # no value makes the URL nil, never a half-filled address.
+    def self.resolve_url(spec, vars: {}, env: ENV)
+      fill_url(choose_url(spec), vars, env)
+    end
+
+    def self.fill_url(url, vars, env)
+      return nil if url.nil?
+
+      missing = false
+      filled = url.gsub(PLACEHOLDER) do
+        found = vars[$1] || env[$1]
+        missing = true if found.nil? || found.empty?
+        found.to_s
+      end
+      missing ? nil : filled
+    end
+    private_class_method :fill_url
+
+    def self.choose_url(spec)
       return spec if spec.is_a?(String) && !spec.empty?
       return nil unless spec.is_a?(Hash)
 
@@ -50,6 +70,7 @@ module Remuda
       end
       chosen.empty? ? nil : chosen
     end
+    private_class_method :choose_url
 
     def self.host_url(url)
       url.to_s.gsub("host.docker.internal", "127.0.0.1")
