@@ -79,6 +79,17 @@ class McpForwarderTest < Minitest::Test
     assert_equal({ "Authorization" => "Bearer from-file" }, routes["gmail"].headers)
   end
 
+  def test_a_placeholder_url_is_filled_for_the_route_and_the_headerless_copy
+    config = { "mcpServers" => {
+      "app" => { "url" => "${APP_URL}/mcp", "headers" => { "X-Key" => "${PLANE_API_KEY}" } },
+      "open" => { "url" => "${APP_URL}/open" }
+    } }
+    agent, routes = Remuda::McpForwarder.plan(config, vars: { "APP_URL" => "http://127.0.0.1:3000", "PLANE_API_KEY" => "k" }, base_url: BASE)
+    assert_equal "http://127.0.0.1:3000/mcp", routes["app"].upstream
+    assert_equal "#{BASE}/app", agent.dig("mcpServers", "app", "url")
+    assert_equal "http://127.0.0.1:3000/open", agent.dig("mcpServers", "open", "url")
+  end
+
   def test_a_missing_variable_is_named_and_never_filled_blank
     config, routes = plan
     assert_equal "#{BASE}/broken", config.dig("mcpServers", "broken", "url")

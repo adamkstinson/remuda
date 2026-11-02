@@ -127,6 +127,7 @@ items.each { |item| warn item.inspect }
 ```
 
 `.mcp.json` `headers` are sent on the call (`${VAR}` from the agent's `.env`).
+`${VAR}` in a server's `url` is filled the same way.
 See the catalog while writing a workflow:
 
 ```bash
@@ -270,6 +271,8 @@ that explicit config is also what stops the adapter writing
 directory declares its servers in its root `.mcp.json`: pi's own project
 config, so `pi` on the host, `Remuda.tool`, and the box all read the same
 file. Header values use pi's `${VAR}` syntax; the value lives in `.env`.
+A `url` may use it too (`"${POE_APP_URL}/mcp"`); an unset variable there is
+an unknown server, never a half-filled address.
 Client options sit next to the URL:
 
 ```json
