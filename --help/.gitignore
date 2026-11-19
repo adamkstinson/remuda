@@ -1,0 +1,4 @@
+.env
+.pi/agent/auth.json
+.pi/auth.json
+.remuda/db/
